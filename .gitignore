@@ -1,2 +1,2 @@
 *.auto.tfvars
-*.terraform
+*.terraform*
