@@ -1,0 +1,62 @@
+apps:
+  applications: 
+  %{ for app in apps }
+  - name: ${app.name}
+    namespace: argocd
+    finalizers:
+    - resources-finalizer.argocd.argoproj.io
+    project: ${app.project}
+    source:
+      repoURL: ${app.repoURL}
+      targetRevision: ${app.targetRevision}
+      chart: ${app.chart}
+      helm:
+        values: ${app.values}
+    destination:
+      server: https://kubernetes.default.svc
+      namespace: ${app.namespace}
+    syncPolicy:
+      automated:
+        prune: true
+        selfHeal: true
+      syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  %{ endfor }
+  projects: 
+  - name: boeing
+    namespace: argocd
+    finalizers:
+    - resources-finalizer.argocd.argoproj.io
+    description: A Sample Project to Deploy applications into Boing Clusters
+    sourceRepos:
+    - '*'
+    destinations:
+    - name: '*'
+      namespace: '*'
+      server: https://kubernetes.default.svc
+    namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+    clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  - name: sammy
+    namespace: argocd
+    finalizers:
+    - resources-finalizer.argocd.argoproj.io
+    description: A Sample Project to Deploy applications into Boing Clusters
+    sourceRepos:
+    - '*'
+    destinations:
+    - name: '*'
+      namespace: '*'
+      server: https://kubernetes.default.svc
+    namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+    clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+

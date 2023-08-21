@@ -1,0 +1,8 @@
+revision: "1-18"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+
+networkGateway: "network-1"

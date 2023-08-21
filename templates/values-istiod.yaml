@@ -1,0 +1,7 @@
+pilot:
+  autoscaleEnabled: true
+  autoscaleMin: 2
+  autoscaleMax: 4
+
+revision: "1-18"
+revisionTags: ["stable"]

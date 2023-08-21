@@ -1,0 +1,14 @@
+alertmanager:
+  alertmanagerSpec:
+    replicas: 2
+
+prometheus:
+  prometheusSpec:
+    replicas: 2
+    storageSpec: 
+     volumeClaimTemplate:
+       spec:
+         resources:
+           requests:
+             storage: 10Gi
+
