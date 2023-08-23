@@ -1,0 +1,118 @@
+version: 0.11.2
+registry: gcr.io
+webhook:
+  replicas: 2
+controller:
+  replicas: 2
+
+#Secrets should be created in the kpack namespace
+kpackSecrets:
+  - kpack-credentials
+  - kpack-cosign-credentials
+buildpacks:
+  - image: gcr.io/paketo-buildpacks/dotnet-core
+    version: 0.38.2
+    lang: dotnet-core
+  - image: gcr.io/paketo-buildpacks/python
+    version: 2.11.0
+    lang: python
+  - image: gcr.io/paketo-buildpacks/nodejs
+    version: 1.8.0
+    lang: nodejs
+  - image: gcr.io/paketo-buildpacks/java
+    version: 9.16.0
+    lang: java
+  - image: gcr.io/paketo-buildpacks/ruby
+    version: 0.36.0
+    lang: ruby
+  - image: gcr.io/paketo-buildpacks/go
+    version: 4.4.3
+    lang: go
+  - image: gcr.io/paketo-buildpacks/php
+    version: 2.5.2
+    lang: php
+  - image: gcr.io/paketo-buildpacks/httpd
+    version: 0.7.5
+    lang: httpd
+  - image: gcr.io/paketo-buildpacks/nginx
+    version: 0.12.2
+    lang: nginx
+
+stacks:
+  base:
+    name: base
+    buildImage: gcr.io/paketo-buildpacks
+    runImage: gcr.io/paketo-buildpacks
+    ubuntu: jammy
+    tag: 0.1.70
+  tiny:
+    name: tiny
+    buildImage: gcr.io/paketo-buildpacks
+    runImage: gcr.io/paketo-buildpacks
+    ubuntu: jammy
+    tag: 0.1.62
+  full:
+    name: full
+    buildImage: gcr.io/paketo-buildpacks
+    runImage: gcr.io/paketo-buildpacks
+    ubuntu: jammy
+    tag: 0.0.102
+  static:
+    name: static
+    buildImage: gcr.io/paketo-buildpacks
+    runImage: gcr.io/paketo-buildpacks
+    ubuntu: jammy
+    tag: 0.0.43
+
+
+
+image:
+  - image: dotnet
+    builder: full
+    git_url: https://github.com/paketo-buildpacks/samples.git
+    revision: main
+    subPath: 
+    - dotnet-core/aspnet
+    - dotnet-core/fdd-app
+    - dotnet-core/fde-app
+    - dotnet-core/runtime
+    # additionalTags:
+    # env:
+  - image: nodejs
+    builder: full
+    git_url: https://github.com/paketo-buildpacks/samples.git
+    revision: main
+    subPath: 
+    - nodejs/angular-npm
+    - nodejs/npm
+    - nodejs/react-yarn
+    - nodejs/vue-npm
+    - nodejs/yarn
+  - image: python
+    builder: full
+    git_url: https://github.com/paketo-buildpacks/samples.git
+    revision: main
+    subPath: 
+    - python/conda
+    - python/pip
+    - python/pipenv
+    - python/poetry-run
+    - python/poetry
+  - image: anthos
+    builder: full
+    git_url: https://github.com/GoogleCloudPlatform/bank-of-anthos.git
+    revision: main
+    subPath: 
+    - src/accounts/userservice
+    - src/accounts/contacts
+    - src/frontend
+    - src/ledger/ledgerwriter
+    - src/loadgenerator
+  - image: wordsmith
+    builder: tiny
+    git_url: https://github.com/jpetazzo/wordsmith.git
+    revision: main
+    subPath: 
+    - web
+    - words
+
