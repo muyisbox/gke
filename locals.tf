@@ -1,5 +1,5 @@
 locals {
-  cluster_type = "node-pool"
+  cluster_type = "gitops"
 
   apps = {
     prometheus = {
@@ -55,6 +55,15 @@ locals {
       project        = "boeing"
       namespace      = "cert-manager"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
+    }
+    kpack = {
+      name           = "kpack-chart"
+      chart          = "kpack-chart"
+      repoURL        = "oci://registry-1.docker.io/muyisbox"
+      targetRevision = "0.11.2"
+      project        = "boeing"
+      namespace      = "kpack"
+      values         = indent(10, yamlencode(file("${path.module}/templates/values-kpack.yaml")))
     }
   }
 }
