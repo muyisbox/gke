@@ -1,6 +1,7 @@
 # Local .terraform directories
 **/.terraform/*
 **/basictf/*
+**/k8s/*
 
 # .tfstate files
 *.tfstate
