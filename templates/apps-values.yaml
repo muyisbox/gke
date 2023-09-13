@@ -16,6 +16,9 @@ apps:
       server: https://kubernetes.default.svc
       namespace: ${app.namespace}
     syncPolicy:
+      managedNamespaceMetadata:
+        labels: # The labels to set on the application namespace
+          istio.io/rev: stable
       automated:
         prune: true
         selfHeal: true
