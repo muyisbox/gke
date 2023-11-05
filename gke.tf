@@ -12,15 +12,16 @@ module "gke" {
   network_policy             = false
   horizontal_pod_autoscaling = true
   filestore_csi_driver       = false
-  kubernetes_version         = "1.27"
+  release_channel            = "UNSPECIFIED"
+  kubernetes_version         = data.google_container_engine_versions.gke-version.latest_master_version
 
   node_pools = [
     {
       name               = "node-pool-01"
       machine_type       = "e2-standard-4"
-      node_locations     = "us-central1-b,us-central1-c"
+      node_locations     = "us-central1-b"
       min_count          = 1
-      max_count          = 5
+      max_count          = 2
       local_ssd_count    = 0
       spot               = false
       disk_size_gb       = 40
@@ -29,17 +30,18 @@ module "gke" {
       enable_gcfs        = false
       enable_gvnic       = false
       auto_repair        = true
-      auto_upgrade       = true
+      auto_upgrade       = false
       service_account    = var.compute_engine_service_account
       preemptible        = false
       initial_node_count = 1
+      version            = data.google_container_engine_versions.gke-version.latest_node_version
     },
     {
       name               = "node-pool-02"
       machine_type       = "e2-medium"
-      node_locations     = "us-central1-b,us-central1-c,us-central1-a"
+      node_locations     = "us-central1-b,us-central1-c"
       min_count          = 1
-      max_count          = 5
+      max_count          = 2
       local_ssd_count    = 0
       spot               = false
       disk_size_gb       = 40
@@ -48,10 +50,11 @@ module "gke" {
       enable_gcfs        = false
       enable_gvnic       = false
       auto_repair        = true
-      auto_upgrade       = true
+      auto_upgrade       = false
       service_account    = var.compute_engine_service_account
       preemptible        = false
       initial_node_count = 1
+      version            = data.google_container_engine_versions.gke-version.latest_node_version
     },
   ]
 
