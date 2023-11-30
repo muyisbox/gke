@@ -65,6 +65,15 @@ locals {
       namespace      = "kpack"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-kpack.yaml")))
     }
+    loki = {
+      name           = "loki-stack"
+      chart          = "loki-stack"
+      repoURL        = "https://grafana.github.io/helm-charts"
+      targetRevision = "2.9.11"
+      project        = "boeing"
+      namespace      = "logging"
+      values         = indent(10, yamlencode(file("${path.module}/templates/values-loki.yaml")))
+    }
   }
 }
 
