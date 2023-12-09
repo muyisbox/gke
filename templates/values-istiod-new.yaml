@@ -3,5 +3,5 @@ pilot:
   autoscaleMin: 2
   autoscaleMax: 4
 
-revision: "1-18"
-revisionTags: ["prev-stable"]
+revision: "1-19"
+revisionTags: ["stable"]

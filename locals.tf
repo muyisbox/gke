@@ -29,6 +29,15 @@ locals {
       namespace      = "istio-system"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
     }
+    istiod-canary = {
+      name           = "istiod-19"
+      chart          = "istiod"
+      repoURL        = "https://istio-release.storage.googleapis.com/charts"
+      targetRevision = "1.19.4"
+      project        = "boeing"
+      namespace      = "istio-system"
+      values         = indent(10, yamlencode(file("${path.module}/templates/values-istiod-new.yaml")))
+    }
     istio-gateway = {
       name           = "istio-gateway-1-18-2"
       chart          = "gateway"
@@ -73,6 +82,15 @@ locals {
       project        = "boeing"
       namespace      = "logging"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-loki.yaml")))
+    }
+    kiali = {
+      name           = "kiali-server"
+      chart          = "kiali-server"
+      repoURL        = "https://kiali.org/helm-charts"
+      targetRevision = "1.77.0"
+      project        = "boeing"
+      namespace      = "istio-system"
+      values         = indent(10, yamlencode(file("${path.module}/templates/values-kiali.yaml")))
     }
   }
 }

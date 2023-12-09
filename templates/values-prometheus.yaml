@@ -1,6 +1,12 @@
 alertmanager:
   alertmanagerSpec:
     replicas: 2
+    storageSpec: 
+     volumeClaimTemplate:
+       spec:
+         resources:
+           requests:
+             storage: 5Gi
 
 grafana:
   additionalDataSources:

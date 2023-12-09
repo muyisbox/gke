@@ -1,0 +1,29 @@
+istio_namespace: istio-system
+deployment:
+  replicas: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "1Gi"
+
+auth:
+  strategy: anonymous
+# --set auth.strategy=anonymous --set deployment.image_version=latest kiali-server _output/charts/kiali-server-*-SNAPSHOT.tgz
+external_services:
+  prometheus:
+    url: http://prometheus-monitoring-kube-prometheus.monitoring:9090
+  istio:
+    url_service_version: http://istiod-1-18.istio-system.svc:15014
+    config_map_name: istio-1-18
+    istio_namespace: istio-system    
+    istiod_deployment_name: istiod-1-18
+    istio_sidecar_injector_config_map_name: istio-sidecar-injector-1-18
+
+kiali_feature_flags:
+  certificates_information_indicators:
+    enabled: true
+    secrets:
+    - cacerts
+    - istio-ca-secret
