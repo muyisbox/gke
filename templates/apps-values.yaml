@@ -11,6 +11,7 @@ apps:
       targetRevision: ${app.targetRevision}
       chart: ${app.chart}
       helm:
+        releaseName: ${app.name}
         values: ${app.values}
     destination:
       server: https://kubernetes.default.svc

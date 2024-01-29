@@ -6,7 +6,7 @@ locals {
       name           = "prometheus-monitoring"
       chart          = "kube-prometheus-stack"
       repoURL        = "https://prometheus-community.github.io/helm-charts"
-      targetRevision = "45.11.1"
+      targetRevision = "55.1.0"
       project        = "boeing"
       namespace      = "monitoring"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-prometheus.yaml")))
@@ -30,7 +30,7 @@ locals {
       values         = indent(10, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
     }
     istiod-canary = {
-      name           = "istiod-19"
+      name           = "istiod"
       chart          = "istiod"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
       targetRevision = "1.19.4"
@@ -39,10 +39,10 @@ locals {
       values         = indent(10, yamlencode(file("${path.module}/templates/values-istiod-new.yaml")))
     }
     istio-gateway = {
-      name           = "istio-gateway-1-18-2"
+      name           = "istio-ingressgateway"
       chart          = "gateway"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
-      targetRevision = "1.18.2"
+      targetRevision = "1.19.4"
       project        = "boeing"
       namespace      = "istio-gateways"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-gateway.yaml")))
@@ -91,6 +91,24 @@ locals {
       project        = "boeing"
       namespace      = "istio-system"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-kiali.yaml")))
+    }
+    argo-rollouts = {
+      name           = "argo-rollouts"
+      chart          = "argo-rollouts"
+      repoURL        = "https://argoproj.github.io/argo-helm"
+      targetRevision = "2.32.*"
+      project        = "boeing"
+      namespace      = "argo-rollouts"
+      values         = indent(10, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
+    }
+    kuma = {
+      name           = "kuma"
+      chart          = "kuma"
+      repoURL        = "https://kumahq.github.io/charts"
+      targetRevision = "2.5.*"
+      project        = "boeing"
+      namespace      = "kong-mesh-system"
+      values         = indent(10, yamlencode(file("${path.module}/templates/values-kuma.yaml")))
     }
   }
 }

@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: istio-demo
+  namespace: nginx-demo
+  labels:
+    app: istio-demo
+    ### Istio injection Labels
+    # istio.io/rev: stable  ### No Injection
+spec:
+  selector:
+    matchLabels:
+      app: istio-demo
+      ### Istio injection Labels
+      # istio.io/rev: stable ### No Injection
+  replicas: 3
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: istio-demo
+        ### Istio injection Labels
+        # istio.io/rev: stable
+    spec:
+      containers:
+      - name:  nginx
+        image:  nginx:1.23
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: istio-demo2
+  namespace: nginx-demo
+  labels:
+    app: istio-demo2
+    ### Istio injection Labels
+    # istio.io/rev: stable  ### No Injection
+spec:
+  selector:
+    matchLabels:
+      app: istio-demo2
+      ### Istio injection Labels
+      # istio.io/rev: stable ### No Injection
+  replicas: 3
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: istio-demo2
+        ### Istio injection Labels
+        istio.io/rev: canary
+    spec:
+      containers:
+      - name:  nginx
+        image:  nginx:1.23
+
+
+#Namespace
+# KEY = istio.io/rev
+# VALUE = stable OR 1-18
+# VALUE = canary OR 1-19
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name:  nginx-demo
+  labels:
+    istio.io/rev: 1-19
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: product-gateway
+  namespace: istio-gateways
+spec:
+  # Select the Istio ingress gateway workload
+  selector:
+    istio: gateway-1-18-2
+  # Define servers for the gateway
+  servers:
+  - port:
+      # Port on which the gateway listens for HTTP traffic
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+      # Hostname for which this server is used
+      - '*'
+--- 
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: product-route
+  namespace: istio-gateways
+spec:
+  # List of hostnames this VirtualService applies to
+  hosts:
+    - '*'
+  # Gateway through which this VirtualService is accessed
+  gateways:
+    - product-gateway
+  http:
+  - match:
+      # Match HTTP requests with URI path "/products"
+    - uri: 
+        prefix: /products
+      # # Rewrite matched URI path to "/api/v1/products"
+      # rewrite:
+      #   uri: /api/v1/products
+  # Route all matched requests to the "reviews-service" service
+    route:
+    - destination:
+        host: productpage.bookinfo.svc.cluster.local
+        port:
+          # Port on which the "reviews-service" service is listening
+          number: 9080
+
+# apiVersion: networking.istio.io/v1alpha3
+# kind: VirtualService
+# metadata:
+#   name: httpbin
+# spec:
+#   hosts:
+#   - "httpbin.example.com"
+#   gateways:
+#   - httpbin-gateway
+#   http:
+#   - match:
+#     - uri:
+#         prefix: /status
+#     - uri:
+#         prefix: /delay
+#     route:
+#     - destination:
+#         port:
+#           number: 8000
+#         host: httpbin
