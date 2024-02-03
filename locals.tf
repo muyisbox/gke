@@ -110,6 +110,15 @@ locals {
       namespace      = "kong-mesh-system"
       values         = indent(10, yamlencode(file("${path.module}/templates/values-kuma.yaml")))
     }
+    argo-rollouts = {
+      name           = "argo-rollouts"
+      chart          = "argo-rollouts"
+      repoURL        = "https://argoproj.github.io/argo-helm"
+      targetRevision = "2.32.*"
+      project        = "boeing"
+      namespace      = "argo-rollouts"
+      values         = indent(10, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
+    }
   }
 }
 
