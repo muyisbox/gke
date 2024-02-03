@@ -25,8 +25,8 @@ module "argocd-apps" {
   ]
 }
 
-resource "kubernetes_manifest" "kuma_mtls" {
-  manifest = yamldecode(file("${path.module}/templates/kuma-mtls.yaml"))
-  depends_on = [ module.argocd-apps ]
-}
+# resource "kubernetes_manifest" "kuma_mtls" {
+#   manifest   = yamldecode(file("${path.module}/templates/kuma-mtls.yaml"))
+#   depends_on = [module.argocd-apps]
+# }
 
