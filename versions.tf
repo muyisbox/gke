@@ -15,23 +15,23 @@
  */
 
 terraform {
- backend "gcs" {
-   bucket  = "terraform-310821"
-   prefix  = "terraform/state"
- }
+  backend "gcs" {
+    bucket = "terraform-310821"
+    prefix = "terraform/state"
+  }
   required_providers {
     google = {
       source = "hashicorp/google"
     }
     google-beta = {
-      source  = "hashicorp/google-beta"
+      source = "hashicorp/google-beta"
     }
     kubernetes = {
-      source = "hashicorp/kubernetes"
+      source  = "hashicorp/kubernetes"
       version = "~> 2.25.0"
     }
     helm = {
-      source = "hashicorp/helm"
+      source  = "hashicorp/helm"
       version = "~> 2.12.1"
     }
   }
