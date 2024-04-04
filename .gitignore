@@ -2,10 +2,13 @@
 **/.terraform/*
 **/basictf/*
 **/k8s/*
+**/ck8/*
+**/kubernetes-project/*
 **/cfg
 **/k8s
 **/basictf
 kube-bench*
+**/istio/*
 
 # .tfstate files
 *.tfstate
