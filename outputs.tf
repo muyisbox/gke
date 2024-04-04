@@ -58,4 +58,8 @@ output "subnet_secondary_ranges" {
 }
 
 
+output "cluster_connect" {
+  description = "The message enables generate a kube-config file for the ckuster"
+  value       = format("gcloud container clusters get-credentials %s --region %s --project %s", module.gke.name, var.region, var.project_id)
+}
 

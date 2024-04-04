@@ -40,3 +40,9 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+-o
+kubernetes-project/cluster-1
+kubernetes-project/vm-instance-1
+ck8/pod.yaml
+ck8/test.yaml
+kubernetes-project/nginx-kubernetes.yaml
