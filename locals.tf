@@ -8,7 +8,7 @@ locals {
       targetRevision = "57.2.0"
       project        = "boeing"
       namespace      = "monitoring"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-prometheus.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-prometheus.yaml")))
     }
     istio-base = {
       name           = "istio-base-1-21"
@@ -17,7 +17,7 @@ locals {
       targetRevision = "1.21.0"
       project        = "boeing"
       namespace      = "istio-system"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-base.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-base.yaml")))
     }
     istiod = {
       name           = "istiod-1-21"
@@ -26,7 +26,7 @@ locals {
       targetRevision = "1.21.0"
       project        = "boeing"
       namespace      = "istio-system"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
     }
     # istiod-canary = {
     #   name           = "istiod"
@@ -35,7 +35,7 @@ locals {
     #   targetRevision = "1.19.4"
     #   project        = "boeing"
     #   namespace      = "istio-system"
-    #   values         = indent(10, yamlencode(file("${path.module}/templates/values-istiod-new.yaml")))
+    #   values         = indent(8, yamlencode(file("${path.module}/templates/values-istiod-new.yaml")))
     # }
     istio-gateway = {
       name           = "istio-ingressgateway"
@@ -44,7 +44,7 @@ locals {
       targetRevision = "1.21.0"
       project        = "boeing"
       namespace      = "istio-gateways"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-gateway.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-gateway.yaml")))
     }
     bookinfo = {
       name           = "bookinfo"
@@ -53,7 +53,7 @@ locals {
       targetRevision = "0.1.0"
       project        = "boeing"
       namespace      = "bookinfo"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-bookinfo.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-bookinfo.yaml")))
     }
     cert-manager = {
       name           = "cert-manager"
@@ -62,7 +62,7 @@ locals {
       targetRevision = "1.14.4"
       project        = "boeing"
       namespace      = "cert-manager"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
     }
     kpack = {
       name           = "kpack-chart"
@@ -71,7 +71,7 @@ locals {
       targetRevision = "0.11.2"
       project        = "boeing"
       namespace      = "kpack"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-kpack.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-kpack.yaml")))
     }
     loki = {
       name           = "loki-stack"
@@ -80,7 +80,7 @@ locals {
       targetRevision = "2.10.2"
       project        = "boeing"
       namespace      = "logging"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-loki.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-loki.yaml")))
     }
     kiali = {
       name           = "kiali-server"
@@ -89,7 +89,7 @@ locals {
       targetRevision = "1.77.0"
       project        = "boeing"
       namespace      = "istio-system"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-kiali.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-kiali.yaml")))
     }
     argo-rollouts = {
       name           = "argo-rollouts"
@@ -98,7 +98,7 @@ locals {
       targetRevision = "2.35.*"
       project        = "boeing"
       namespace      = "argo-rollouts"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
     }
     kuma = {
       name           = "kuma"
@@ -107,7 +107,7 @@ locals {
       targetRevision = "2.5.*"
       project        = "boeing"
       namespace      = "kong-mesh-system"
-      values         = indent(10, yamlencode(file("${path.module}/templates/values-kuma.yaml")))
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-kuma.yaml")))
     }
   }
   charts = {
@@ -127,5 +127,73 @@ locals {
     apps = local.apps
   })
 
+}
+
+
+locals {
+  # Assuming var.apps is a map of objects where each object has properties like
+  # project, repoURL, targetRevision, chart, name, values, and namespace
+  argo_applications = yamlencode({
+    applications = { for k, app in local.apps : k => {
+      namespace  = "argocd"
+      finalizers = ["resources-finalizer.argocd.argoproj.io"]
+      project    = app.project
+      source = {
+        repoURL        = app.repoURL
+        targetRevision = app.targetRevision
+        chart          = app.chart
+        helm = {
+          releaseName = app.name
+          values      = app.values
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = app.namespace
+      }
+      syncPolicy = {
+        managedNamespaceMetadata = {
+          labels = {
+            "istio.io/rev" = "stable"
+          }
+        }
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+        syncOptions = ["CreateNamespace=true", "ServerSideApply=true"]
+      }
+      }
+    }
+  })
+  app_project = yamlencode({
+    projects = {
+      boeing = {
+        namespace   = "argocd"
+        finalizers  = ["resources-finalizer.argocd.argoproj.io"]
+        description = "A Sample Project to Deploy applications into Boing Clusters"
+        sourceRepos = ["*"]
+        destinations = [
+          {
+            name      = "*"
+            namespace = "*"
+            server    = "https://kubernetes.default.svc"
+          }
+        ]
+        namespaceResourceWhitelist = [
+          {
+            group = "*"
+            kind  = "*"
+          }
+        ]
+        clusterResourceWhitelist = [
+          {
+            group = "*"
+            kind  = "*"
+          }
+        ]
+      },
+    }
+  })
 }
 

@@ -1,49 +1,35 @@
+---
 alertmanager:
   alertmanagerSpec:
     replicas: 2
-    storageSpec: 
-     volumeClaimTemplate:
-       spec:
-         resources:
-           requests:
-             storage: 5Gi
-
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 5Gi
 grafana:
   additionalDataSources:
-  - name: Loki
-    access: proxy
-    orgId: 1
-    type: loki
-    jsonData:
+    - name: Loki
+      access: proxy
+      orgId: 1
+      type: loki
+      jsonData:
         tlsSkipVerify: true
-    url: http://loki-stack.logging.svc.cluster.local:3100
-    version: 1
-  # - name: prometheus-sample
-  #   access: proxy
-  #   basicAuth: true
-  #   basicAuthPassword: pass
-  #   basicAuthUser: daco
-  #   editable: false
-  #   jsonData:
-  #       tlsSkipVerify: true
-  #   orgId: 1
-  #   type: prometheus
-  #   url: https://{{ printf "%s-prometheus.svc" .Release.Name }}:9090
-  #   version: 1
-
+      url: http://loki-stack.logging.svc.cluster.local:3100
+      version: 1
 prometheus:
   prometheusSpec:
     replicas: 2
-    storageSpec: 
-     volumeClaimTemplate:
-       spec:
-         resources:
-           requests:
-             storage: 10Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 10Gi
 prometheusOperator:
   enabled: true
   admissionWebhooks:
     patch:
       podAnnotations:
         sidecar.istio.io/inject: "false"
-

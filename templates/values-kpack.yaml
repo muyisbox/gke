@@ -1,11 +1,10 @@
+---
 version: 0.11.2
 registry: gcr.io
 webhook:
   replicas: 2
 controller:
   replicas: 2
-
-#Secrets should be created in the kpack namespace
 kpackSecrets:
   - kpack-credentials
   - kpack-cosign-credentials
@@ -37,7 +36,6 @@ buildpacks:
   - image: gcr.io/paketo-buildpacks/nginx
     version: 0.12.2
     lang: nginx
-
 stacks:
   base:
     name: base
@@ -63,56 +61,50 @@ stacks:
     runImage: gcr.io/paketo-buildpacks
     ubuntu: jammy
     tag: 0.0.43
-
-
-
 image:
   - image: dotnet
     builder: full
     git_url: https://github.com/paketo-buildpacks/samples.git
     revision: main
-    subPath: 
-    - dotnet-core/aspnet
-    - dotnet-core/fdd-app
-    - dotnet-core/fde-app
-    - dotnet-core/runtime
-    # additionalTags:
-    # env:
+    subPath:
+      - dotnet-core/aspnet
+      - dotnet-core/fdd-app
+      - dotnet-core/fde-app
+      - dotnet-core/runtime
   - image: nodejs
     builder: full
     git_url: https://github.com/paketo-buildpacks/samples.git
     revision: main
-    subPath: 
-    - nodejs/angular-npm
-    - nodejs/npm
-    - nodejs/react-yarn
-    - nodejs/vue-npm
-    - nodejs/yarn
+    subPath:
+      - nodejs/angular-npm
+      - nodejs/npm
+      - nodejs/react-yarn
+      - nodejs/vue-npm
+      - nodejs/yarn
   - image: python
     builder: full
     git_url: https://github.com/paketo-buildpacks/samples.git
     revision: main
-    subPath: 
-    - python/conda
-    - python/pip
-    - python/pipenv
-    - python/poetry-run
-    - python/poetry
+    subPath:
+      - python/conda
+      - python/pip
+      - python/pipenv
+      - python/poetry-run
+      - python/poetry
   - image: anthos
     builder: full
     git_url: https://github.com/GoogleCloudPlatform/bank-of-anthos.git
     revision: main
-    subPath: 
-    - src/accounts/userservice
-    - src/accounts/contacts
-    - src/frontend
-    - src/ledger/ledgerwriter
-    - src/loadgenerator
+    subPath:
+      - src/accounts/userservice
+      - src/accounts/contacts
+      - src/frontend
+      - src/ledger/ledgerwriter
+      - src/loadgenerator
   - image: wordsmith
     builder: tiny
     git_url: https://github.com/jpetazzo/wordsmith.git
     revision: main
-    subPath: 
-    - web
-    - words
-
+    subPath:
+      - web
+      - words

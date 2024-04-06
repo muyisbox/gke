@@ -1,46 +1,46 @@
 
-argocd:
+# argocd:
   ## Globally shared configuration
-  configs:
-    cm:
-      exec.enabled: true
-    repositories: 
-      istio-helm-repo:
-        url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
-        name: istio.io
-        type: helm
-      prometheus-helm-repo:
-        url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
-        name: prometheus.io
-        type: helm
-      ambassador-helm-repo:
-        url: https://app.getambassador.io
-        name: ambassador.io
-        type: helm
-      bitnami-helm-repo:
-        url: https://charts.bitnami.com/bitnami
-        name: bitnami.io
-        type: helm
+configs:
+  cm:
+    exec.enabled: true
+  repositories: 
+    istio-helm-repo:
+      url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
+      name: istio.io
+      type: helm
+    prometheus-helm-repo:
+      url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
+      name: prometheus.io
+      type: helm
+    ambassador-helm-repo:
+      url: https://app.getambassador.io
+      name: ambassador.io
+      type: helm
+    bitnami-helm-repo:
+      url: https://charts.bitnami.com/bitnami
+      name: bitnami.io
+      type: helm
 
-  server:
-    autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 5
-      targetCPUUtilizationPercentage: 50
-      targetMemoryUtilizationPercentage: 50
-
-  redis-ha:
+server:
+  autoscaling:
     enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 50
 
-  controller:
-    replicas: 2
+redis-ha:
+  enabled: true
+
+controller:
+  replicas: 2
 
 
-  repoServer:
-    autoscaling:
-      enabled: true
-      minReplicas: 2
+repoServer:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
 
-  applicationSet:
-    replicaCount: 2
+applicationSet:
+  replicaCount: 2
