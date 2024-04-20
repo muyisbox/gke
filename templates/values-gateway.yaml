@@ -1,4 +1,4 @@
-revision: "1-18"
+revision: "1-21"
 
 autoscaling:
   enabled: true
