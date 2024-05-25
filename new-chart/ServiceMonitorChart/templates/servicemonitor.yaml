@@ -13,7 +13,7 @@ spec:
       {{ toYaml .serviceSelector | nindent 6 }}
     {{- end }}
   endpoints:
-  - port: {{ int (default 8080 .servicePort) }}
+  - port: {{ (default 8080 .servicePort) | quote }}
   namespaceSelector:
     any: true
 {{-  end }}
