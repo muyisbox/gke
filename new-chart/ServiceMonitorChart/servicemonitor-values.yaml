@@ -1,0 +1,12 @@
+serviceMonitor:
+  - name: app1  ## Required, This is the name of the Servicemonitor
+    namespace: monitoring  ## Required, This is the name of namespace where the servicemonitor will be deployed
+    servicePort: 80 ## Optional, Default port is 8080
+    serviceSelector: ## Optional, Add additional Selectors
+      application-tier: frontend
+  - name: app2
+    namespace: argocd
+  - name: istio
+    namespace: istio-system
+
+
