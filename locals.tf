@@ -28,15 +28,15 @@ locals {
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
     }
-    # istiod-canary = {
-    #   name           = "istiod"
-    #   chart          = "istiod"
-    #   repoURL        = "https://istio-release.storage.googleapis.com/charts"
-    #   targetRevision = "1.19.4"
-    #   project        = "boeing"
-    #   namespace      = "istio-system"
-    #   values         = indent(8, yamlencode(file("${path.module}/templates/values-istiod-new.yaml")))
-    # }
+    vpa = {
+      name           = "vpa"
+      chart          = "vpa"
+      repoURL        = "https://charts.fairwinds.com/stable"
+      targetRevision = "4.4.6"
+      project        = "boeing"
+      namespace      = "vpa"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-vpa.yaml")))
+    }
     istio-gateway = {
       name           = "istio-ingressgateway"
       chart          = "gateway"
@@ -64,15 +64,15 @@ locals {
       namespace      = "cert-manager"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
     }
-    kpack = {
-      name           = "kpack-chart"
-      chart          = "kpack-chart"
-      repoURL        = "oci://registry-1.docker.io/muyisbox"
-      targetRevision = "0.11.2"
-      project        = "boeing"
-      namespace      = "kpack"
-      values         = indent(8, yamlencode(file("${path.module}/templates/values-kpack.yaml")))
-    }
+    # kpack = {
+    #   name           = "kpack-chart"
+    #   chart          = "kpack-chart"
+    #   repoURL        = "oci://registry-1.docker.io/muyisbox"
+    #   targetRevision = "0.11.2"
+    #   project        = "boeing"
+    #   namespace      = "kpack"
+    #   values         = indent(8, yamlencode(file("${path.module}/templates/values-kpack.yaml")))
+    # }
     loki = {
       name           = "loki-stack"
       chart          = "loki-stack"
@@ -100,15 +100,15 @@ locals {
       namespace      = "argo-rollouts"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
     }
-    kuma = {
-      name           = "kuma"
-      chart          = "kuma"
-      repoURL        = "https://kumahq.github.io/charts"
-      targetRevision = "2.5.*"
-      project        = "boeing"
-      namespace      = "kong-mesh-system"
-      values         = indent(8, yamlencode(file("${path.module}/templates/values-kuma.yaml")))
-    }
+    # kuma = {
+    #   name           = "kuma"
+    #   chart          = "kuma"
+    #   repoURL        = "https://kumahq.github.io/charts"
+    #   targetRevision = "2.5.*"
+    #   project        = "boeing"
+    #   namespace      = "kong-mesh-system"
+    #   values         = indent(8, yamlencode(file("${path.module}/templates/values-kuma.yaml")))
+    # }
   }
   charts = {
     argocd = {

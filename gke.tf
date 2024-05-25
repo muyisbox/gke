@@ -19,7 +19,7 @@ module "gke" {
     {
       name               = "node-pool-01"
       machine_type       = "e2-standard-4"
-      node_locations     = "us-central1-b"
+      node_locations     = "us-central1-b,us-central1-c"
       min_count          = 1
       max_count          = 2
       local_ssd_count    = 0
@@ -38,6 +38,26 @@ module "gke" {
     },
     {
       name               = "node-pool-02"
+      machine_type       = "e2-medium"
+      node_locations     = "us-central1-b,us-central1-c"
+      min_count          = 1
+      max_count          = 2
+      local_ssd_count    = 0
+      spot               = true
+      disk_size_gb       = 40
+      disk_type          = "pd-standard"
+      image_type         = "COS_CONTAINERD"
+      enable_gcfs        = false
+      enable_gvnic       = false
+      auto_repair        = true
+      auto_upgrade       = false
+      service_account    = var.compute_engine_service_account
+      preemptible        = false
+      initial_node_count = 1
+      version            = data.google_container_engine_versions.gke-version.latest_node_version
+    },
+    {
+      name               = "node-pool-03"
       machine_type       = "e2-medium"
       node_locations     = "us-central1-b,us-central1-c"
       min_count          = 1

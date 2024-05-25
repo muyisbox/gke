@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Deployment
+metadata:
+  name: "service{{ .Capabilities.KubeVersion.GitVersion }}"
+  namespace: "{{ .Release.Namespace }}"
+  labels:
+    app: service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: service
+  template:
+    metadata:
+      labels:
+        app: service
+    spec:
+      containers:
+      - name: "service-{{ .Chart.Name }}"
+        image:  alpine:{{ .Chart.AppVersion }}
+        args:
+          - sleep
+          - 300s
+        env:
+        - name: MY_CPU_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              containerName: service
+              resource: requests.cpu
+              divisor: 1m
+        - name: TEST_CM
+          valueFrom:
+            configMapKeyRef:
+              name: test-cm-1
+              key: outputs.tf
+              optional: true
+        resources:
+          requests:
+            cpu: 500m
+            memory: 100Mi
+          limits:
+            cpu: 500m
+            memory: 100Mi
+        ports:
+        - containerPort: 9898
+          name: http

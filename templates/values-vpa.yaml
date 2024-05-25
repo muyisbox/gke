@@ -1,0 +1,15 @@
+recommender:
+  replicaCount: 2
+
+updater:
+  replicaCount: 2
+  # updater.resources -- The resources block for the updater pod
+  resources:
+    limits: {}
+      # cpu: 200m
+      # memory: 1000Mi
+    requests:
+      cpu: 50m
+      memory: 500Mi
+podLabels:
+  sidecar.istio.io/inject: "false"

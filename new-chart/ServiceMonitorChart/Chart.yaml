@@ -1,0 +1,44 @@
+apiVersion: v2
+name: servicemonitors
+description: A Helm chart for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: servicemonitors
+spec:
+  destination:
+    name: ''
+    namespace: monitoring
+    server: 'https://kubernetes.default.svc'
+  source:
+    path: ''
+    repoURL: 'oci://registry-1.docker.io/muyisbox'
+    chart: servicemonitors-0.1.0
+    helm: 
+      # valueFiles:
+      # valuesObject:
+      #   serviceMonitor:
+      #     - name: app1  ## Required, This is the name of the Servicemonitor
+      #       namespace: monitoring  ## Required, This is the name of namespace where the servicemonitor will be deployed
+      #       servicePort: 80 ## Optional, Default port is 8080
+      #       serviceSelector: ## Optional, Add additional Selectors
+      #         application-tier: frontend
+      #     - name: app2
+      #       namespace: argocd
+      values: |
+        serviceMonitor:
+          - name: app1  ## Required, This is the name of the Servicemonitor
+            namespace: monitoring  ## Required, This is the name of namespace where the servicemonitor will be deployed
+            servicePort: 80 ## Optional, Default port is 8080
+            serviceSelector: ## Optional, Add additional Selectors
+              application-tier: frontend
+          - name: app2
+            namespace: argocd
+  sources: []
+  project: default
+

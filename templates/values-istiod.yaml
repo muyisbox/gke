@@ -4,4 +4,4 @@ pilot:
   autoscaleMax: 4
 
 revision: "1-21"
-revisionTags: ["prev-stable"]
+revisionTags: ["stable"]

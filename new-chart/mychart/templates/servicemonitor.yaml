@@ -1,0 +1,16 @@
+{{ if .Values.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+       {{- include "mychart.labels" . | nindent 6 }}
+  endpoints:
+  - port: {{ .Values.service.port }}
+  namespaceSelector:
+    any: true
+{{- end }}
