@@ -1,0 +1,73 @@
+{{- range $name, $config := .Values.modules }}
+apiVersion: app.terraform.io/v1alpha2
+kind: Module
+metadata:
+  name: {{ .Values.module.name }}
+spec:
+  organization: {{ .Values.module.organization }}
+  module:
+    source: {{ .Values.module.source }}
+    version: {{ .Values.module.version }}
+  workspace:
+    id: {{ .Values.module.workspace.id }}
+  {{- if .Values.module.description }}
+  description: {{ .Values.module.description }}
+  {{- end }}
+  {{- if .Values.module.executionMode }}
+  executionMode: {{ .Values.module.executionMode }}
+  {{- end }}
+  {{- if .Values.module.applyMethod }}
+  applyMethod: {{ .Values.module.applyMethod }}
+  {{- end }}
+  {{- if .Values.module.allowDestroyPlan }}
+  allowDestroyPlan: {{ .Values.module.allowDestroyPlan }}
+  {{- end }}
+  {{- if .Values.module.remoteStateSharing }}
+  remoteStateSharing: {{ .Values.module.remoteStateSharing }}
+  {{- end }}
+  token:
+    secretKeyRef:
+      name: {{ .Values.module.token.secretKeyRef.name }}
+      key: {{ .Values.module.token.secretKeyRef.key }}
+  variables:
+  {{- range .Values.module.variables }}
+    - key: {{ .key }}
+      value: {{ .value }}
+  {{- end }}
+  outputs:
+  {{- range .Values.module.outputs }}
+    - key: {{ .key }}
+  {{- end }}
+  {{- if .Values.module.environment }}
+  environment: {{ .Values.module.environment }}
+  {{- end }}
+  {{- if .Values.module.notifications }}
+  notifications:
+  {{- range .Values.module.notifications }}
+    - name: {{ .name }}
+      destinationType: {{ .destinationType }}
+      token:
+        secretKeyRef:
+          name: {{ .token.secretKeyRef.name }}
+          key: {{ .token.secretKeyRef.key }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.module.runTasks }}
+  runTasks:
+  {{- range .Values.module.runTasks }}
+    - name: {{ .name }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.module.runTriggers }}
+  runTriggers:
+  {{- range .Values.module.runTriggers }}
+    - name: {{ .name }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.module.project }}
+  project: {{ .Values.module.project }}
+  {{- end }}
+  {{- if .Values.module.sshKeyID }}
+  sshKeyID: {{ .Values.module.sshKeyID }}
+  {{- end }}
+{{- end }}

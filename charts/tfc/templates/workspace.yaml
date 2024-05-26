@@ -1,0 +1,94 @@
+{{- range $name, $config := .Values.workspaces }}
+apiVersion: app.terraform.io/v1alpha2
+kind: Workspace
+metadata:
+  name: {{ default $$name $config.name }}
+spec:
+  organization: {{ $config.organization }}
+  {{- if $config.agentPool }}
+  agentPool: {{ $config.agentPool }}
+  {{- end }}
+  {{- if $config.applyMethod }}
+  applyMethod: {{ $config.applyMethod }}
+  {{- end }}
+  {{- if $config.autoApply }}
+  autoApply: {{ $config.autoApply }}
+  {{- end }}
+  {{- if $config.description }}
+  description: {{ $config.description }}
+  {{- end }}
+  {{- if $config.executionMode }}
+  executionMode: {{ $config.executionMode }}
+  {{- end }}
+  {{- if $config.notifications }}
+  notifications:
+    {{- range $config.notifications }}
+    - name: {{ .name }}
+      enabled: {{ .enabled }}
+      destinationType: {{ .destinationType }}
+      address: {{ .address }}
+      token: {{ .token }}
+    {{- end }}
+  {{- end }}
+  {{- if $config.project }}
+  project: {{ $config.project }}
+  {{- end }}
+  {{- if $config.remoteStateSharing }}
+  remoteStateSharing: {{ $config.remoteStateSharing }}
+  {{- end }}
+  {{- if $config.runTasks }}
+  runTasks:
+    {{- range $config.runTasks }}
+    - name: {{ .name }}
+    {{- end }}
+  {{- end }}
+  {{- if $config.runTriggers }}
+  runTriggers:
+    {{- range $config.runTriggers }}
+    - name: {{ .name }}
+    {{- end }}
+  {{- end }}
+  {{- if $config.sshKey }}
+  sshKey: {{ $config.sshKey }}
+  {{- end }}
+  {{- if $config.tags }}
+  tags:
+    {{- range $config.tags }}
+    - {{ . }}
+    {{- end }}
+  {{- end }}
+  {{- if $config.teamAccess }}
+  teamAccess:
+    {{- range $config.teamAccess }}
+    - name: {{ .name }}
+      access: {{ .access }}
+    {{- end }}
+  {{- end }}
+  {{- if $config.terraformVariables }}
+  terraformVariables:
+    {{- range $config.terraformVariables }}
+    - name: {{ .key }}
+      value: {{ .value }}
+      sensitive: {{ .sensitive }}
+    {{- end }}
+  {{- end }}
+  {{- if $config.terraformVersion }}
+  terraformVersion: {{ $config.terraformVersion }}
+  {{- end }}
+  {{- if $config.versionControl }}
+  versionControl:
+    repoPath: {{ $config.versionControl.repoPath }}
+    branch: {{ $config.versionControl.branch }}
+    ingressSubmodules: {{ $config.versionControl.ingressSubmodules }}
+    workingDirectory: {{ $config.versionControl.workingDirectory }}
+  {{- end }}
+  environmentVariables:
+  {{- range $config.environmentVariables }}
+    - name: {{ .name }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .valueFrom.secretKeyRef.name }}
+          key: {{ .valueFrom.secretKeyRef.key }}
+  {{- end }}
+  allowDestroyPlan: {{ $config.allowDestroyPlan }}
+{{- end }}
