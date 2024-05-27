@@ -124,7 +124,15 @@ steps:
   # - name: 'gcr.io/cloud-builders/gcloud'
   #   args: ['builds', 'triggers', 'run', 'gke', '--config=/workspace/cloudbuild_generated.yaml', '--region=$LOCATION', '--substitutions=_TF_VERSION=1.8,_WORKSPACES=dev,staging,gitops']
   - name: 'gcr.io/cloud-builders/gcloud'
-    args: ['builds', 'submit', 'https://github.com/$REPO_FULL_NAME', '--config=/workspace/cloudbuild_generated.yaml', '--region=$LOCATION', '--git-source-revision=$BRANCH_NAME', '--substitutions="_TF_VERSION=1.8,_WORKSPACES=dev,staging,gitops,BRANCH_NAME=$BRANCH_NAME,REPO_NAME=$REPO_NAME"']
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        gcloud builds submit https://github.com/$REPO_FULL_NAME \
+          --config=/workspace/cloudbuild_generated.yaml \
+          --region=$LOCATION \
+          --git-source-revision=$BRANCH_NAME \
+          --substitutions=_TF_VERSION=1.8,_WORKSPACES=dev,staging,gitops,BRANCH_NAME=$BRANCH_NAME,REPO_NAME=$REPO_NAME
 options:
   dynamicSubstitutions: true
   automapSubstitutions: true
