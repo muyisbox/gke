@@ -115,8 +115,12 @@
 
 steps:
   - name: 'python:3.12'
-    entrypoint: 'python'
-    args: ['generate_cloudbuild.py']
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        pip install pyyaml
+        python generate_cloudbuild.py
   - name: 'gcr.io/cloud-builders/gcloud'
     args: ['builds', 'submit', '--config=cloudbuild_generated.yaml', '.']
 options:
