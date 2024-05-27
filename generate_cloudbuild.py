@@ -1,7 +1,7 @@
 import yaml
 import os
 
-workspaces = os.environ.get('${_WORKSPACES}').split(',')
+workspaces = os.environ.get('${_WORKSPACES}', 'dev,staging,gitops').split(',')
 
 steps = [
     {
