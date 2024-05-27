@@ -127,7 +127,7 @@ steps:
       #!/bin/sh
       env
   - name: 'gcr.io/cloud-builders/gcloud'
-    args: ['builds', 'submit', '.', '--config=/workspace/cloudbuild_generated.yaml', '--region=$LOCATION']
+    args: ['builds', 'submit', 'https://github.com/$REPO_FULL_NAME', '--config=/workspace/cloudbuild_generated.yaml', '--region=$LOCATION', --git-source-revision=$BRANCH_NAME]
 options:
   dynamicSubstitutions: true
   automapSubstitutions: true
