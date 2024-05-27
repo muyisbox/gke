@@ -69,12 +69,10 @@ for workspace in workspaces:
                 echo "Branch Name inside destroy step: $BRANCH_NAME"
                 if [ "$BRANCH_NAME" = "destroy-all" ]; then
                   echo "Preparing to destroy all resources..."
-                  CONFIRM="yes"
-                  if [ "$CONFIRM" = "yes" ]; then
-                    echo "Destroying resources in workspace: {workspace}"
-                    terraform init -reconfigure
-                    terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
-                  fi
+                  echo "Auto-confirming destruction"
+                  echo "Destroying resources in workspace: {workspace}"
+                  terraform init -reconfigure
+                  terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
                 else
                   echo "Destroy operation not allowed on this branch."
                 fi
