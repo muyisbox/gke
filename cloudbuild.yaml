@@ -17,13 +17,15 @@ steps:
       #!/bin/sh
       echo "Branch Name inside setup and plan step: $BRANCH_NAME"
       if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        echo "Workspaces: ${_WORKSPACES}"
         OLD_IFS="$IFS"
         IFS=','
         set -f  # Disable glob expansion
-        set -- $WORKSPACES
+        set -- $_WORKSPACES
         IFS="$OLD_IFS"
         for WORKSPACE do
-          echo "Initializing Terraform for workspace: $WORKSPACE"
+          echo "Processing workspace: $WORKSPACE"
+          # Initialize Terraform
           terraform init
 
           # Create workspace if it doesn't exist
@@ -31,7 +33,10 @@ steps:
             terraform workspace new $WORKSPACE
           fi
 
+          # Validate Terraform configuration
           terraform validate
+
+          # Plan Terraform
           terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=tfplan_$WORKSPACE
         done
         set +f  # Re-enable glob expansion
@@ -45,10 +50,11 @@ steps:
       #!/bin/sh
       echo "Branch Name inside apply step: $BRANCH_NAME"
       if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        echo "Workspaces: ${_WORKSPACES}"
         OLD_IFS="$IFS"
         IFS=','
         set -f  # Disable glob expansion
-        set -- $WORKSPACES
+        set -- $_WORKSPACES
         IFS="$OLD_IFS"
         for WORKSPACE do
           echo "Applying Terraform plan for workspace: $WORKSPACE"
@@ -69,10 +75,11 @@ steps:
         echo "Are you sure you want to destroy all resources? (yes/no): "
         read CONFIRM
         if [ "$CONFIRM" = "yes" ]; then
+          echo "Workspaces: ${_WORKSPACES}"
           OLD_IFS="$IFS"
           IFS=','
           set -f  # Disable glob expansion
-          set -- $WORKSPACES
+          set -- $_WORKSPACES
           IFS="$OLD_IFS"
           for WORKSPACE do
             echo "Destroying resources in workspace: $WORKSPACE"
