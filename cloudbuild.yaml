@@ -129,7 +129,7 @@ steps:
       - |
         go mod init github.com/username/cloudbuild-generator
         go get gopkg.in/yaml.v3
-        go run generate_cloudbuild.go
+        _PR_NUMBER=${_PR_NUMBER} go run generate_cloudbuild.go
 
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'sh'

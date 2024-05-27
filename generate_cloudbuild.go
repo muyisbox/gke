@@ -32,7 +32,7 @@ func main() {
             Entrypoint: "bash",
             Args: []string{
                 "-c",
-                "echo \"************************\"; echo \"Branch Name: $BRANCH_NAME\"; echo \"Pull Request: $_PR_NUMBER\"; echo \"************************\"",
+                fmt.Sprintf("echo \"************************\"; echo \"Branch Name: $BRANCH_NAME\"; echo \"Pull Request: %s\"; echo \"************************\"", prNumber),
             },
         },
     }
@@ -46,7 +46,7 @@ func main() {
                 "-c",
                 fmt.Sprintf(`
                 echo "Branch Name inside setup and plan step: $BRANCH_NAME"
-                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "$_PR_NUMBER" ]; then
+                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "%s" ]; then
                     echo "Processing workspace: %s"
                     terraform init -reconfigure
                     terraform workspace select %s || terraform workspace new %s
@@ -55,7 +55,7 @@ func main() {
                 else
                     echo "Skipping setup and plan on branch $BRANCH_NAME"
                 fi
-                `, workspace, workspace, workspace, workspace),
+                `, prNumber, workspace, workspace, workspace, workspace),
             },
         }, Step{
             ID:         fmt.Sprintf("apply %s", workspace),
