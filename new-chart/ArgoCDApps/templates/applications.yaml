@@ -1,0 +1,31 @@
+{{ range .Values.applications }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: 
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  name: '{{ .name }}'
+  namespace: argocd
+spec:
+  destination:
+    namespace: {{ .namespace }}
+    server: https://kubernetes.default.svc
+  project: '{{ default "default" .project}}'
+  source:
+    chart: {{ .chartName }}
+    helm:
+      releaseName: {{ default .chartName .releaseName }}
+    repoURL: '{{ .chartUrl }}'
+    targetRevision: '{{ .chartVersion }}'
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # managedNamespaceMetadata:
+    #   labels:
+    #     istio.io/rev: stable
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+{{-  end }}

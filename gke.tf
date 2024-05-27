@@ -1,11 +1,13 @@
 module "gke" {
-  source                     = "terraform-google-modules/kubernetes-engine/google"
+  source                     = "terraform-google-modules/kubernetes-engine/google//modules/beta-private-cluster"
   project_id                 = var.project_id
   name                       = "${local.cluster_type}-cluster-${var.cluster_name_suffix}"
   region                     = var.region
   zones                      = var.zones
   network                    = var.network
   subnetwork                 = var.subnetwork
+  enable_private_nodes       = true
+  deletion_protection        = false
   ip_range_pods              = "ip-range-pods"
   ip_range_services          = "ip-range-svc"
   http_load_balancing        = false

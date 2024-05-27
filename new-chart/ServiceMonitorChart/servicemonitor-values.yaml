@@ -10,7 +10,7 @@ serviceMonitor:
     namespace: istio-system
   - name: istio2
     namespace: istio-system
-  - name: istio3
+  - name: istio
     namespace: istio-system
 
 
