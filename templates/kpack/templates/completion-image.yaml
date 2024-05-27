@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kpack.fullname" . }}-completion-image
+  labels:
+  {{- include "kpack.labels" . | nindent 4 }}
+data:
+  image: {{ .Values.completionImage.image | quote }}
