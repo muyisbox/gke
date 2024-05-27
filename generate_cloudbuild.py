@@ -19,7 +19,7 @@ for workspace in workspaces:
         {
             'id': f'setup and plan {workspace}',
             'name': 'hashicorp/terraform:${_TF_VERSION}',
-            'entrypoint': 'bash',
+            'entrypoint': 'sh',
             'args': [
                 '-c',
                 f'''
@@ -45,7 +45,7 @@ for workspace in workspaces:
             'id': f'apply {workspace}',
             'name': 'hashicorp/terraform:${_TF_VERSION}',
             'waitFor': [f'setup and plan {workspace}'],
-            'entrypoint': 'bash',
+            'entrypoint': 'sh',
             'args': [
                 '-c',
                 f'''
@@ -62,7 +62,7 @@ for workspace in workspaces:
         {
             'id': f'destroy {workspace}',
             'name': 'hashicorp/terraform:${_TF_VERSION}',
-            'entrypoint': 'bash',
+            'entrypoint': 'sh',
             'args': [
                 '-c',
                 f'''
