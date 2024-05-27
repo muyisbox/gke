@@ -124,7 +124,6 @@ steps:
     env:
       - 'WORKSPACES=${_WORKSPACES}'
       - 'TF_VERSION=${_TF_VERSION}'
-      - 'PR_NUMBER=${_PR_NUMBER}'
 
   - name: 'golang'
     entrypoint: 'sh'

@@ -1,7 +1,7 @@
 import os
 import yaml
 
-def generate_cloudbuild(workspaces, tf_version, pr_number):
+def generate_cloudbuild(workspaces, tf_version):
     steps = [
         {
             'id': 'branch name',
@@ -9,10 +9,7 @@ def generate_cloudbuild(workspaces, tf_version, pr_number):
             'entrypoint': 'bash',
             'args': [
                 '-c',
-                'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: $PR_NUMBER"; echo "************************"'
-            ],
-            'env': [
-                f'PR_NUMBER={pr_number}'
+                'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: $_PR_NUMBER"; echo "************************"'
             ]
         }
     ]
@@ -27,7 +24,7 @@ def generate_cloudbuild(workspaces, tf_version, pr_number):
                     '-c',
                     f'''
                     echo "Branch Name inside setup and plan step: $BRANCH_NAME"
-                    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "$PR_NUMBER" ]; then
+                    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "$_PR_NUMBER" ]; then
                         echo "Processing workspace: {workspace}"
                         terraform init -reconfigure
                         
@@ -46,9 +43,6 @@ def generate_cloudbuild(workspaces, tf_version, pr_number):
                         echo "Skipping setup and plan on branch $BRANCH_NAME"
                     fi
                     '''
-                ],
-                'env': [
-                    f'PR_NUMBER={pr_number}'
                 ]
             },
             {
@@ -124,9 +118,8 @@ def generate_cloudbuild(workspaces, tf_version, pr_number):
 if __name__ == '__main__':
     workspaces = os.environ['WORKSPACES'].split(',')
     tf_version = os.environ['TF_VERSION']
-    pr_number = os.environ['PR_NUMBER']
 
-    cloudbuild = generate_cloudbuild(workspaces, tf_version, pr_number)
+    cloudbuild = generate_cloudbuild(workspaces, tf_version)
 
     with open('cloudbuild_generated.yaml', 'w') as file:
         yaml.dump(cloudbuild, file)
