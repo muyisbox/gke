@@ -73,10 +73,8 @@ for workspace in workspaces:
                     echo "Preparing to destroy all resources..."
                     echo "Auto-confirming destruction"
                     echo "Destroying resources in workspace: {workspace}"
-                    if ! terraform workspace select {workspace}; then
-                        terraform workspace new {workspace}
-                    fi
                     terraform init -reconfigure
+                    terraform workspace select {workspace} || terraform workspace new {workspace}
                     terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
                 else
                     echo "Destroy operation not allowed on this branch."
