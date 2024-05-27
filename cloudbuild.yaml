@@ -59,6 +59,12 @@ steps:
         set -- $_WORKSPACES
         IFS="$OLD_IFS"
         for WORKSPACE do
+
+          # Create workspace if it doesn't exist
+          if ! terraform workspace select $WORKSPACE; then
+            terraform workspace new $WORKSPACE
+          fi
+          
           echo "Applying Terraform plan for workspace: $WORKSPACE"
           terraform apply -auto-approve /workspace/tfplan_$WORKSPACE
         done
