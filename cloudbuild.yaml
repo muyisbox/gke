@@ -132,6 +132,7 @@ steps:
           --config=/workspace/cloudbuild_generated.yaml \
           --region=$LOCATION \
           --git-source-revision=$BRANCH_NAME \
+          --substitutions=BRANCH_NAME=$BRANCH_NAME
 
 options:
   dynamicSubstitutions: true
