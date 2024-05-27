@@ -131,5 +131,4 @@ options:
 substitutions:
   _TF_VERSION: '1.8'
   _WORKSPACES: 'dev,staging,gitops'
-  BRANCH_NAME: '$BRANCH_NAME'  # Default value
   REPO_NAME: 'https://github.com/$REPO_FULL_NAME'
