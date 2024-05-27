@@ -23,6 +23,7 @@ steps:
         set -f  # Disable glob expansion
         set -- $_WORKSPACES
         IFS="$OLD_IFS"
+        mkdir -p /workspace/$BUILD_ID # Create directory for storing plans
         for WORKSPACE do
           echo "Processing workspace: $WORKSPACE"
           # Initialize Terraform
@@ -90,8 +91,6 @@ steps:
           IFS="$OLD_IFS"
           for WORKSPACE do
             echo "Processing workspace: $WORKSPACE"
-            # Initialize Terraform
-            terraform init -reconfigure
 
             # Create workspace if it doesn't exist
             if ! terraform workspace select $WORKSPACE; then
@@ -99,10 +98,10 @@ steps:
             fi
             echo "Destroying resources in workspace: $WORKSPACE"
 
-            terraform init -backend-config="bucket=${_GCS_BUCKET}" -backend-config="prefix=terraform/state/$WORKSPACE" -reconfigure
+            terraform init -reconfigure
 
             terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
-            
+
           done
           set +f  # Re-enable glob expansion
         fi
