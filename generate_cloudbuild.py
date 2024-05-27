@@ -4,7 +4,7 @@ import yaml
 def generate_cloudbuild():
     workspaces = os.environ.get('_WORKSPACES', 'dev,staging,gitops').split(',')
     tf_version = os.environ.get('_TF_VERSION', '1.8')
-    pr_number = os.environ.get('_PR_NUMBER', '')
+    pr_number = '${_PR_NUMBER}'  # Use the substitution variable syntax directly
 
     steps = [
         {
@@ -120,4 +120,4 @@ def generate_cloudbuild():
     print("cloudbuild_generated.yaml file generated successfully.")
 
 if __name__ == '__main__':
-    generate_cloudbuild()
+    generate_cloudbuild().
