@@ -120,7 +120,7 @@ steps:
       - '-c'
       - |
         pip install pyyaml
-        python /workspace/generate_cloudbuild.py
+        _PR_NUMBER=${_PR_NUMBER} python /workspace/generate_cloudbuild.py
 
   - name: 'golang'
     entrypoint: 'sh'
