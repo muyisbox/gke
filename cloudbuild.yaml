@@ -132,7 +132,7 @@ steps:
           --config=/workspace/cloudbuild_generated.yaml \
           --region=$LOCATION \
           --git-source-revision=$BRANCH_NAME \
-          --substitutions='_TF_VERSION=1.8,_WORKSPACES="dev,staging,gitops",BRANCH_NAME=$BRANCH_NAME,REPO_NAME=https://github.com/$REPO_FULL_NAME'
+          --substitutions='_TF_VERSION=1.8:_WORKSPACES="dev,staging,gitops":BRANCH_NAME=$BRANCH_NAME:REPO_NAME=https://github.com/$REPO_FULL_NAME'
 
 options:
   dynamicSubstitutions: true
@@ -140,3 +140,4 @@ options:
 substitutions:
   _TF_VERSION: '1.8'
   _WORKSPACES: 'dev,staging,gitops'
+# --dict-flag=^:^a=b,c:d=f,g # => {'a': 'b,c', 'd': 'f,g'}
