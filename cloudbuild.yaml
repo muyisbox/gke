@@ -23,11 +23,12 @@ steps:
         set -f  # Disable glob expansion
         set -- $_WORKSPACES
         IFS="$OLD_IFS"
+        mkdir -p /workspace/tfplans  # Create directory for storing plans
         for WORKSPACE do
           echo "Processing workspace: $WORKSPACE"
           # Initialize Terraform
           terraform init -reconfigure
-          
+
           # Create workspace if it doesn't exist
           if ! terraform workspace select $WORKSPACE; then
             terraform workspace new $WORKSPACE
@@ -38,14 +39,22 @@ steps:
 
           # Plan Terraform
           terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=tfplan_$WORKSPACE
+          
+          # Save the plan as an artifact
+          cp tfplan_$WORKSPACE /workspace/tfplans/
         done
         set +f  # Re-enable glob expansion
       else
         echo "Skipping setup and plan on branch $BRANCH_NAME"
       fi
+    artifacts:
+      objects:
+        location: 'gs://$PROJECT_ID-cloudbuild-artifacts/tfplans/$BUILD_ID'
+        paths: ['/workspace/tfplans/*']
 
   - id: 'apply'
     name: 'hashicorp/terraform:${_TF_VERSION}'
+    waitFor: ['setup and plan']
     script: |
       #!/bin/sh
       echo "Branch Name inside apply step: $BRANCH_NAME"
@@ -58,6 +67,7 @@ steps:
         IFS="$OLD_IFS"
         for WORKSPACE do
           echo "Applying Terraform plan for workspace: $WORKSPACE"
+          gsutil cp gs://$PROJECT_ID-cloudbuild-artifacts/tfplans/$BUILD_ID/tfplan_$WORKSPACE .
           terraform apply -auto-approve tfplan_$WORKSPACE
         done
         set +f  # Re-enable glob expansion
@@ -90,7 +100,6 @@ steps:
       else
         echo "Destroy operation not allowed on this branch."
       fi
-
 
 options:
   dynamicSubstitutions: true
