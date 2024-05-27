@@ -4,7 +4,7 @@ import yaml
 def generate_cloudbuild():
     workspaces = os.environ.get('_WORKSPACES', 'dev,staging,gitops').split(',')
     tf_version = os.environ.get('_TF_VERSION', '1.8')
-    pr_number = '${_PR_NUMBER}'  # Use the substitution variable syntax directly
+    pr_number = os.getenv('_PR_NUMBER', '')  # Use directly from environment
 
     steps = [
         {
@@ -110,17 +110,10 @@ def generate_cloudbuild():
             }
         ])
 
-    cloudbuild = {
-        'steps': steps,
-        'substitutions': {
-            '_TF_VERSION': tf_version,
-            '_WORKSPACES': os.environ.get('_WORKSPACES', 'dev,staging,gitops'),
-            '_PR_NUMBER': ''
-        }
-    }
+    cloudbuild = {'steps': steps}
 
     with open('cloudbuild_generated.yaml', 'w') as file:
-        yaml.dump(cloudbuild, file)
+        yaml.dump(cloudbuild, file, default_flow_style=False)
 
     print("cloudbuild_generated.yaml file generated successfully.")
 
