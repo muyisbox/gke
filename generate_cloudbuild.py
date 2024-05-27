@@ -1,7 +1,8 @@
 import yaml
 import os
 
-workspaces = '${_WORKSPACES}'.split(',')
+workspaces = os.environ.get('_WORKSPACES', 'dev,staging,gitops').split(',')
+tf_version = os.environ.get('_TF_VERSION', '1.8')
 
 steps = [
     {
@@ -19,7 +20,7 @@ for workspace in workspaces:
     steps.extend([
         {
             'id': f'setup and plan {workspace}',
-            'name': 'hashicorp/terraform:${_TF_VERSION}',
+            'name': f'hashicorp/terraform:{tf_version}',
             'entrypoint': 'sh',
             'args': [
                 '-c',
@@ -41,7 +42,7 @@ for workspace in workspaces:
         },
         {
             'id': f'apply {workspace}',
-            'name': 'hashicorp/terraform:${_TF_VERSION}',
+            'name': f'hashicorp/terraform:{tf_version}',
             'waitFor': [f'setup and plan {workspace}'],
             'entrypoint': 'sh',
             'args': [
@@ -62,7 +63,7 @@ for workspace in workspaces:
         },
         {
             'id': f'destroy {workspace}',
-            'name': 'hashicorp/terraform:${_TF_VERSION}',
+            'name': f'hashicorp/terraform:{tf_version}',
             'entrypoint': 'sh',
             'args': [
                 '-c',
@@ -86,11 +87,7 @@ for workspace in workspaces:
     ])
 
 cloudbuild = {
-    'steps': steps,
-    'options': {
-        'dynamicSubstitutions': True,
-        'automapSubstitutions': True
-    }
+    'steps': steps
 }
 
 with open('cloudbuild_generated.yaml', 'w') as file:
