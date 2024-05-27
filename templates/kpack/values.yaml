@@ -1,0 +1,107 @@
+buildInitImage:
+  image: gcr.io/cf-build-service-public/kpack/build-init@sha256:f36ce4c96d829933a86fd9b661c42d00048ccd471d85256f6b5dd4d2a28c3921
+buildInitWindowsImage:
+  image: gcr.io/cf-build-service-public/kpack/build-init-windows@sha256:215240f6310891de7e42a4e5de12b19cff234265efd5404970068a44b27c8065
+buildWaiterImage:
+  image: gcr.io/cf-build-service-public/kpack/build-waiter@sha256:6d4c1f4588b68ed59580fab999222a93c5d78d638b0fd57962f5aa3a6ef3c0cb
+completionImage:
+  image: gcr.io/cf-build-service-public/kpack/completion@sha256:db56d99900b5d941cce3575e6e7901b83fc0ac3c673702345ca8ef0b56950e24
+completionWindowsImage:
+  image: gcr.io/cf-build-service-public/kpack/completion-windows@sha256:6b61606aa6d2314d0861399e221c7c1ca2f110b15c0e5d35f5989b8d7bbd7ac8
+configLogging:
+  zapLoggerConfig: |-
+    {
+      "level": "info",
+      "development": false,
+      "outputPaths": ["stdout"],
+      "errorOutputPaths": ["stderr"],
+      "encoding": "json",
+      "encoderConfig": {
+        "timeKey": "ts",
+        "levelKey": "level",
+        "nameKey": "logger",
+        "callerKey": "caller",
+        "messageKey": "msg",
+        "stacktraceKey": "stacktrace",
+        "lineEnding": "",
+        "levelEncoder": "",
+        "timeEncoder": "rfc3339nano",
+        "durationEncoder": "",
+        "callerEncoder": ""
+      }
+    }
+controller:
+  serviceAccount:
+    annotations: {}
+kpackController:
+  controller:
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    env:
+      configLoggingName: config-logging
+      configObservabilityName: config-observability
+      enablePriorityClasses: "false"
+      experimentalGenerateSlsaAttestation: "false"
+      injectedSidecarSupport: "false"
+      insecureSshTrustUnknownHosts: "true"
+      metricsDomain: kpack.io
+      systemServiceAccount: controller
+    image:
+      repository: gcr.io/cf-build-service-public/kpack/controller@sha256
+      tag: f4fc9b950f68227a166543e43f94a24c1fcb281e82a485b6cd50f4a6c584e57e
+    resources:
+      limits:
+        memory: 1Gi
+      requests:
+        cpu: 20m
+        memory: 1Gi
+  nodeSelector:
+    kubernetes.io/os: linux
+  replicas: 1
+kpackWebhook:
+  nodeSelector:
+    kubernetes.io/os: linux
+  ports:
+  - port: 443
+    targetPort: 8443
+  replicas: 1
+  type: ClusterIP
+  webhook:
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      privileged: false
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    env:
+      configLoggingName: config-logging
+      configObservabilityName: config-observability
+      metricsDomain: kpack.io
+    image:
+      repository: gcr.io/cf-build-service-public/kpack/webhook@sha256
+      tag: 4976229a6064daf3434233efd1eddb484d63ee04b9682b2f6ddd97b9d1c1213e
+    resources:
+      limits:
+        cpu: 100m
+        memory: 200Mi
+      requests:
+        cpu: 10m
+        memory: 50Mi
+kubernetesClusterDomain: cluster.local
+lifecycleImage:
+  image: gcr.io/cf-build-service-public/kpack/lifecycle@sha256:199043ac6fd40f772decb804ca92cdcbb22b76cf8db622761e25c39c2925d3b7
+rebaseImage:
+  image: gcr.io/cf-build-service-public/kpack/rebase@sha256:cfd3ff4e5ed075255d991f4b3ae939c1972f53dc27f6f1f725e8a4c6591442ca
+webhook:
+  serviceAccount:
+    annotations: {}

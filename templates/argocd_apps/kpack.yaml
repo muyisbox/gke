@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kpack-deployment
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/buildpacks-community/kpack.git'
+    targetRevision: 'v0.13.3'
+    path: 'config'
+    kustomize:
+      # version: "v5.2.1"  # Ensure you specify the Kustomize version if required
+      # images:
+      #   - name: "index.docker.io/busybox"
+      #     newName: "abc.acr.io/index.docker.io/busybox"
+      #   - name: "gcr.io/google-containers/busybox"
+      #     newName: "abc.acr.io/gcr.io/google-containers/busybox"
+      # replicas:
+      #   - name: "kpack-webhook"
+      #     count: 2
+      #   - name: "kpack-controller"
+      #     count: 2
+      patches:
+        - patch: |-
+            - op: replace
+              path: /spec/replicas
+              value: 2
+          target:
+            group: apps
+            version: v1
+            kind: Deployment
+            name: kpack-webhook
+        - patch: |-
+            - op: replace
+              path: /spec/replicas
+              value: 2
+          target:
+            group: apps
+            version: v1
+            kind: Deployment
+            name: kpack-controller
+        - patch: |-
+            - op: add
+              path: /imagePullSecrets
+              value:
+                - name: myregistrykey
+            - op: add
+              path: /secrets
+              value:
+                - name: mysecret
+                - name: anothersecret
+          target:
+            group: v1
+            version: v1
+            kind: ServiceAccount
+            name: controller
+            namespace: kpack
+      # replicas:
+      #   - name: kpack-webhook
+      #     count: 2
+      #   - name: kpack-controller
+      #     count: 2
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: kpack
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

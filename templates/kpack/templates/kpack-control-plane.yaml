@@ -1,0 +1,9 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ include "kpack.fullname" . }}-kpack-control-plane
+  labels:
+  {{- include "kpack.labels" . | nindent 4 }}
+description: Super High priority class for kpack control plane components
+globalDefault: false
+value: 10000

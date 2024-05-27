@@ -1,0 +1,84 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kpack.fullname" . }}-mutatingwebhookconfiguration-admin
+  labels:
+  {{- include "kpack.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - kpack
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resourceNames:
+  - kpack
+  resources:
+  - namespaces/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - defaults.webhook.kpack.io
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - update
+  - delete
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - validation.webhook.kpack.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - update
+  - delete
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resourceNames:
+  - images.kpack.io
+  - builds.kpack.io
+  - builders.kpack.io
+  - sourceresolvers.kpack.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - update
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch

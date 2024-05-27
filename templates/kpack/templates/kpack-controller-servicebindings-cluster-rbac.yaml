@@ -1,0 +1,11 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kpack.fullname" . }}-kpack-controller-servicebindings-cluster-role
+  labels:
+  {{- include "kpack.labels" . | nindent 4 }}
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      servicebinding.io/controller: "true"
+rules: null

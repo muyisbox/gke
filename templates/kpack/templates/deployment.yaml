@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kpack.fullname" . }}-kpack-controller
+  labels:
+  {{- include "kpack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.kpackController.replicas }}
+  selector:
+    matchLabels:
+      app: kpack-controller
+    {{- include "kpack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: kpack-controller
+        version: 0.13.3
+      {{- include "kpack.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - env:
+        - name: ENABLE_PRIORITY_CLASSES
+          value: {{ quote .Values.kpackController.controller.env.enablePriorityClasses
+            }}
+        - name: INJECTED_SIDECAR_SUPPORT
+          value: {{ quote .Values.kpackController.controller.env.injectedSidecarSupport
+            }}
+        - name: EXPERIMENTAL_GENERATE_SLSA_ATTESTATION
+          value: {{ quote .Values.kpackController.controller.env.experimentalGenerateSlsaAttestation
+            }}
+        - name: INSECURE_SSH_TRUST_UNKNOWN_HOSTS
+          value: {{ quote .Values.kpackController.controller.env.insecureSshTrustUnknownHosts
+            }}
+        - name: CONFIG_LOGGING_NAME
+          value: {{ quote .Values.kpackController.controller.env.configLoggingName }}
+        - name: CONFIG_OBSERVABILITY_NAME
+          value: {{ quote .Values.kpackController.controller.env.configObservabilityName
+            }}
+        - name: METRICS_DOMAIN
+          value: {{ quote .Values.kpackController.controller.env.metricsDomain }}
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: SYSTEM_SERVICE_ACCOUNT
+          value: {{ quote .Values.kpackController.controller.env.systemServiceAccount }}
+        - name: BUILD_INIT_IMAGE
+          valueFrom:
+            configMapKeyRef:
+              key: image
+              name: {{ include "kpack.fullname" . }}-build-init-image
+        - name: BUILD_INIT_WINDOWS_IMAGE
+          valueFrom:
+            configMapKeyRef:
+              key: image
+              name: {{ include "kpack.fullname" . }}-build-init-windows-image
+        - name: BUILD_WAITER_IMAGE
+          valueFrom:
+            configMapKeyRef:
+              key: image
+              name: {{ include "kpack.fullname" . }}-build-waiter-image
+        - name: REBASE_IMAGE
+          valueFrom:
+            configMapKeyRef:
+              key: image
+              name: {{ include "kpack.fullname" . }}-rebase-image
+        - name: COMPLETION_IMAGE
+          valueFrom:
+            configMapKeyRef:
+              key: image
+              name: {{ include "kpack.fullname" . }}-completion-image
+        - name: COMPLETION_WINDOWS_IMAGE
+          valueFrom:
+            configMapKeyRef:
+              key: image
+              name: {{ include "kpack.fullname" . }}-completion-windows-image
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.kpackController.controller.image.repository }}:{{ .Values.kpackController.controller.image.tag
+          | default .Chart.AppVersion }}
+        name: controller
+        resources: {{- toYaml .Values.kpackController.controller.resources | nindent 10
+          }}
+        securityContext: {{- toYaml .Values.kpackController.controller.containerSecurityContext
+          | nindent 10 }}
+      nodeSelector: {{- toYaml .Values.kpackController.nodeSelector | nindent 8 }}
+      priorityClassName: kpack-control-plane
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: {{ include "kpack.fullname" . }}-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kpack.fullname" . }}-kpack-webhook
+  labels:
+  {{- include "kpack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.kpackWebhook.replicas }}
+  selector:
+    matchLabels:
+      app: kpack-webhook
+    {{- include "kpack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: kpack-webhook
+        role: webhook
+        version: 0.13.3
+      {{- include "kpack.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - env:
+        - name: CONFIG_LOGGING_NAME
+          value: {{ quote .Values.kpackWebhook.webhook.env.configLoggingName }}
+        - name: CONFIG_OBSERVABILITY_NAME
+          value: {{ quote .Values.kpackWebhook.webhook.env.configObservabilityName }}
+        - name: METRICS_DOMAIN
+          value: {{ quote .Values.kpackWebhook.webhook.env.metricsDomain }}
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.kpackWebhook.webhook.image.repository }}:{{ .Values.kpackWebhook.webhook.image.tag
+          | default .Chart.AppVersion }}
+        name: webhook
+        ports:
+        - containerPort: 8443
+          name: https-webhook
+        resources: {{- toYaml .Values.kpackWebhook.webhook.resources | nindent 10 }}
+        securityContext: {{- toYaml .Values.kpackWebhook.webhook.containerSecurityContext
+          | nindent 10 }}
+      nodeSelector: {{- toYaml .Values.kpackWebhook.nodeSelector | nindent 8 }}
+      priorityClassName: kpack-control-plane
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: {{ include "kpack.fullname" . }}-webhook

@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kpack.fullname" . }}-kpack-controller-local-config-binding
+  labels:
+  {{- include "kpack.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: '{{ include "kpack.fullname" . }}-kpack-controller-local-config'
+subjects:
+- kind: ServiceAccount
+  name: '{{ include "kpack.fullname" . }}-controller'
+  namespace: '{{ .Release.Namespace }}'
