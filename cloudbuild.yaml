@@ -6,7 +6,7 @@ steps:
   - id: 'branch name'
     name: 'ubuntu'
     script: |
-      #!/usr/bin/env bash
+      #!/bin/sh
       echo "***********************"
       echo "Branch Name: $BRANCH_NAME"
       echo "***********************"
@@ -15,43 +15,31 @@ steps:
     name: 'hashicorp/terraform:${_TF_VERSION}'
     script: |
       #!/bin/sh
-      # Convert comma-separated list to array
-      OLD_IFS="$IFS"
-      IFS=','
-      set -f  # Disable glob expansion
-      set -- $WORKSPACES
-      IFS="$OLD_IFS"
-      for WORKSPACE do
-        echo "Setting up workspace: $WORKSPACE"
-        # Initialize Terraform
-        terraform init
-
-        # Create workspace if it doesn't exist
-        terraform workspace select $WORKSPACE 2>/dev/null || terraform workspace new $WORKSPACE
-
-        # Validate Terraform configuration
-        terraform validate
-
-        # Plan Terraform
-        terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=tfplan_$WORKSPACE
-      done
-      set +f  # Re-enable glob expansion
+      echo "Branch Name inside setup and plan step: $BRANCH_NAME"
+      if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
+        for WORKSPACE in "${workspaces[@]}"; do
+          echo "Initializing Terraform for workspace: $WORKSPACE"
+          terraform init
+          terraform workspace select $WORKSPACE 2>/dev/null || terraform workspace new $WORKSPACE
+          terraform validate
+          terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=tfplan_$WORKSPACE
+        done
+      else
+        echo "Skipping setup and plan on branch $BRANCH_NAME"
+      fi
 
   - id: 'apply'
     name: 'hashicorp/terraform:${_TF_VERSION}'
     script: |
       #!/bin/sh
+      echo "Branch Name inside apply step: $BRANCH_NAME"
       if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-        OLD_IFS="$IFS"
-        IFS=','
-        set -f  # Disable glob expansion
-        set -- $WORKSPACES
-        IFS="$OLD_IFS"
-        for WORKSPACE do
+        IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
+        for WORKSPACE in "${workspaces[@]}"; do
           echo "Applying Terraform plan for workspace: $WORKSPACE"
           terraform apply -auto-approve tfplan_$WORKSPACE
         done
-        set +f  # Re-enable glob expansion
       else
         echo "Skipping apply on branch $BRANCH_NAME"
       fi
@@ -60,25 +48,22 @@ steps:
     name: 'hashicorp/terraform:${_TF_VERSION}'
     script: |
       #!/bin/sh
+      echo "Branch Name inside destroy step: $BRANCH_NAME"
       if [ "$BRANCH_NAME" = "destroy-all" ]; then
         echo "Preparing to destroy all resources..."
         echo "Are you sure you want to destroy all resources? (yes/no): "
         read CONFIRM
         if [ "$CONFIRM" = "yes" ]; then
-          OLD_IFS="$IFS"
-          IFS=','
-          set -f  # Disable glob expansion
-          set -- $WORKSPACES
-          IFS="$OLD_IFS"
-          for WORKSPACE do
+          IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
+          for WORKSPACE in "${workspaces[@]}"; do
             echo "Destroying resources in workspace: $WORKSPACE"
             terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
           done
-          set +f  # Re-enable glob expansion
         fi
       else
         echo "Destroy operation not allowed on this branch."
       fi
+
 
 options:
   dynamicSubstitutions: true
