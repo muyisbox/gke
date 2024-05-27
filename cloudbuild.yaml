@@ -47,10 +47,6 @@ steps:
       else
         echo "Skipping setup and plan on branch $BRANCH_NAME"
       fi
-    artifacts:
-      objects:
-        location: 'gs://$PROJECT_ID-cloudbuild-artifacts/tfplans/$BUILD_ID'
-        paths: ['/workspace/tfplans/*']
 
   - id: 'apply'
     name: 'hashicorp/terraform:${_TF_VERSION}'
@@ -67,7 +63,7 @@ steps:
         IFS="$OLD_IFS"
         for WORKSPACE do
           echo "Applying Terraform plan for workspace: $WORKSPACE"
-          gsutil cp gs://$PROJECT_ID-cloudbuild-artifacts/tfplans/$BUILD_ID/tfplan_$WORKSPACE .
+          gsutil cp gs://cluster-dreams-terraform/tfplans/$BUILD_ID/tfplan_$WORKSPACE .
           terraform apply -auto-approve tfplan_$WORKSPACE
         done
         set +f  # Re-enable glob expansion
@@ -101,6 +97,13 @@ steps:
         echo "Destroy operation not allowed on this branch."
       fi
 
+artifacts:
+  objects:
+    location: 'gs://cluster-dreams-terraform/tfplans/$BUILD_ID'
+    paths: ['/workspace/tfplans/*']
+
 options:
   dynamicSubstitutions: true
   automapSubstitutions: true
+
+
