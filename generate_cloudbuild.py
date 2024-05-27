@@ -29,17 +29,32 @@ def generate_cloudbuild(workspaces, tf_version):
                         terraform init -reconfigure
                         
                         # Create workspace if it doesn't exist
-                        mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
-                        terraform workspace new {workspace} || terraform workspace select {workspace}
+                        mkdir -p /workspace/$BUILD_ID # Create directory for storing plans
                         
-                        # Wait for state lock
-                        while ! terraform workspace select {workspace}; do
-                            echo "Workspace {workspace} is locked. Waiting for 10 seconds..."
-                            sleep 10
+                        # Wait for state lock with exponential backoff
+                        wait_time=20
+                        max_wait_time=300 # 5 minutes
+                        while true; do
+                            if terraform workspace select {workspace} 2>/dev/null; then
+                                break
+                            elif terraform workspace new {workspace}; then
+                                break
+                            else
+                                echo "Workspace {workspace} is locked or creation failed. Waiting for $wait_time seconds..."
+                                sleep $wait_time
+                                
+                                # Double the wait time for the next iteration
+                                wait_time=$((wait_time * 2))
+                                
+                                # Cap the wait time at the maximum limit
+                                if [ $wait_time -gt $max_wait_time ]; then
+                                    wait_time=$max_wait_time
+                                fi
+                            fi
                         done
                         
                         terraform validate
-                        terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace}
+                        terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace} -parallelism=60
                     else
                         echo "Skipping setup and plan on branch $BRANCH_NAME"
                     fi
@@ -68,7 +83,7 @@ def generate_cloudbuild(workspaces, tf_version):
                             sleep 10
                         done
                         
-                        terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_{workspace}
+                        terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_{workspace} -parallelism=60
                     else
                         echo "Skipping apply on branch $BRANCH_NAME"
                     fi
