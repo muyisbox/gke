@@ -120,9 +120,9 @@ steps:
       - '-c'
       - |
         pip install pyyaml
-        python generate_cloudbuild.py
+        python /workspace/generate_cloudbuild.py
   - name: 'gcr.io/cloud-builders/gcloud'
-    args: ['builds', 'submit', '--config=cloudbuild_generated.yaml', '.']
+    args: ['builds', 'submit', '--config=/workspace/cloudbuild_generated.yaml', '.']
 options:
   dynamicSubstitutions: true
   automapSubstitutions: true
