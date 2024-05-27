@@ -67,4 +67,3 @@ steps:
           fi
         else
           echo "Destroy operation not allowed on this branch."
-update cloudbuild
