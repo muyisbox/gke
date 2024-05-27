@@ -29,6 +29,7 @@ def generate_cloudbuild(workspaces, tf_version):
                         terraform init -reconfigure
                         
                         # Create workspace if it doesn't exist
+                        mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
                         terraform workspace new {workspace} || terraform workspace select {workspace}
                         
                         # Wait for state lock
