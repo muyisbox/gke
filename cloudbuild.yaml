@@ -14,7 +14,7 @@ steps:
   - id: 'setup and plan'
     name: 'hashicorp/terraform:${_TF_VERSION}'
     script: |
-      #!/usr/bin/env bash
+      #!/bin/sh
       # Convert comma-separated list to array
       IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
       for WORKSPACE in "${workspaces[@]}"; do
@@ -35,7 +35,7 @@ steps:
   - id: 'apply'
     name: 'hashicorp/terraform:${_TF_VERSION}'
     script: |
-      #!/usr/bin/env bash
+      #!/bin/sh
       if [[ "$BRANCH_NAME" == "main" || "$BRANCH_NAME" == "master" ]]; then
         IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
         for WORKSPACE in "${workspaces[@]}"; do
@@ -48,7 +48,7 @@ steps:
   - id: 'destroy'
     name: 'hashicorp/terraform:${_TF_VERSION}'
     script: |
-      #!/usr/bin/env bash
+      #!/bin/sh
       if [[ "$BRANCH_NAME" == "destroy-all" ]]; then
         echo "Preparing to destroy all resources..."
         read -p "Are you sure you want to destroy all resources? (yes/no): " CONFIRM
