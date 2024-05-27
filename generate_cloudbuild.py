@@ -113,7 +113,10 @@ def generate_cloudbuild(workspaces, tf_version, pr_number):
         ])
 
     cloudbuild = {
-        'steps': steps
+        'steps': steps,
+        'options': {
+            'substitutionOption': 'ALLOW_LOOSE'
+        }
     }
 
     return cloudbuild
