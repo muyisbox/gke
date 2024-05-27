@@ -25,13 +25,13 @@ for workspace in workspaces:
             'args': [
                 '-c',
                 f'''
+
                 echo "Branch Name inside setup and plan step: $BRANCH_NAME"
-                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]|| [ -n "$PULL_REQUEST_NUMBER" ]; then
                     echo "Processing workspace: {workspace}"
+                    mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
                     terraform init -reconfigure
-                    if ! terraform workspace select {workspace}; then
-                        terraform workspace new {workspace}
-                    fi
+                    terraform workspace select {workspace} || terraform workspace new {workspace}
                     terraform validate
                     terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace}
                 else
@@ -51,9 +51,8 @@ for workspace in workspaces:
                 echo "Branch Name inside apply step: $BRANCH_NAME"
                 if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
                     echo "Applying Terraform plan for workspace: {workspace}"
-                    if ! terraform workspace select {workspace}; then
-                        terraform workspace new {workspace}
-                    fi
+                    terraform init -reconfigure
+                    terraform workspace select {workspace} || terraform workspace new {workspace}
                     terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_{workspace}
                 else
                     echo "Skipping apply on branch $BRANCH_NAME"
