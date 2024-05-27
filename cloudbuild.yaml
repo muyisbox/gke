@@ -140,7 +140,7 @@ steps:
           --config=/workspace/cloudbuild_generated.yaml \
           --region=$LOCATION \
           --git-source-revision=$BRANCH_NAME \
-          --substitutions=^:^BRANCH_NAME=$BRANCH_NAME:_PR_NUMBER=$_PR_NUMBER
+          --substitutions=^:^BRANCH_NAME=$BRANCH_NAME:_PR_NUMBER=${_PR_NUMBER}
 
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'sh'
