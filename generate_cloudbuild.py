@@ -1,19 +1,18 @@
 import os
 import yaml
 
-def generate_cloudbuild():
-    workspaces = os.environ.get('_WORKSPACES', 'dev,staging,gitops').split(',')
-    tf_version = os.environ.get('_TF_VERSION', '1.8')
-    pr_number = os.getenv('_PR_NUMBER', '')  # Use directly from environment
-
+def generate_cloudbuild(workspaces, tf_version, pr_number):
     steps = [
         {
             'id': 'branch name',
             'name': 'ubuntu',
-            'entrypoint': 'sh',
+            'entrypoint': 'bash',
             'args': [
                 '-c',
-                f'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: {pr_number}"; echo "************************"'
+                'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: $PR_NUMBER"; echo "************************"'
+            ],
+            'env': [
+                f'PR_NUMBER={pr_number}'
             ]
         }
     ]
@@ -23,12 +22,12 @@ def generate_cloudbuild():
             {
                 'id': f'setup and plan {workspace}',
                 'name': f'hashicorp/terraform:{tf_version}',
-                'entrypoint': 'bash',
+                'entrypoint': 'sh',
                 'args': [
                     '-c',
                     f'''
                     echo "Branch Name inside setup and plan step: $BRANCH_NAME"
-                    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "{pr_number}" ]; then
+                    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "$PR_NUMBER" ]; then
                         echo "Processing workspace: {workspace}"
                         terraform init -reconfigure
                         
@@ -47,6 +46,9 @@ def generate_cloudbuild():
                         echo "Skipping setup and plan on branch $BRANCH_NAME"
                     fi
                     '''
+                ],
+                'env': [
+                    f'PR_NUMBER={pr_number}'
                 ]
             },
             {
@@ -110,12 +112,20 @@ def generate_cloudbuild():
             }
         ])
 
-    cloudbuild = {'steps': steps}
+    cloudbuild = {
+        'steps': steps
+    }
 
-    with open('cloudbuild_generated.yaml', 'w') as file:
-        yaml.dump(cloudbuild, file, default_flow_style=False)
-
-    print("cloudbuild_generated.yaml file generated successfully.")
+    return cloudbuild
 
 if __name__ == '__main__':
-    generate_cloudbuild()
+    workspaces = os.environ['WORKSPACES'].split(',')
+    tf_version = os.environ['TF_VERSION']
+    pr_number = os.environ['PR_NUMBER']
+
+    cloudbuild = generate_cloudbuild(workspaces, tf_version, pr_number)
+
+    with open('cloudbuild_generated.yaml', 'w') as file:
+        yaml.dump(cloudbuild, file)
+
+    print("cloudbuild_generated.yaml file generated successfully.")
