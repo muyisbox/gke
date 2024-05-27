@@ -3,6 +3,7 @@ import os
 
 workspaces = os.environ.get('_WORKSPACES', 'dev,staging,gitops').split(',')
 tf_version = os.environ.get('_TF_VERSION', '1.8')
+pr_number = os.environ.get('_PR_NUMBER', '')
 
 steps = [
     {
@@ -11,7 +12,7 @@ steps = [
         'entrypoint': 'bash',
         'args': [
             '-c',
-            'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "************************"'
+            'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: $_PR_NUMBER"; echo "************************"'
         ]
     },
 ]
@@ -25,9 +26,8 @@ for workspace in workspaces:
             'args': [
                 '-c',
                 f'''
-
                 echo "Branch Name inside setup and plan step: $BRANCH_NAME"
-                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]|| [ -n "$_PR_NUMBER" ]; then
+                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "$_PR_NUMBER" ]; then
                     echo "Processing workspace: {workspace}"
                     mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
                     terraform init -reconfigure
@@ -89,3 +89,4 @@ cloudbuild = {
 
 with open('cloudbuild_generated.yaml', 'w') as file:
     yaml.dump(cloudbuild, file)
+    # mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
