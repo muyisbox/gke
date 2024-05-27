@@ -113,8 +113,8 @@ def generate_cloudbuild():
     cloudbuild = {
         'steps': steps,
         'substitutions': {
-            '_TF_VERSION': '1.8',
-            '_WORKSPACES': 'dev,staging,gitops',
+            '_TF_VERSION': tf_version,
+            '_WORKSPACES': os.environ.get('_WORKSPACES', 'dev,staging,gitops'),
             '_PR_NUMBER': ''
         }
     }
