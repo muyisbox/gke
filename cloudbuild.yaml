@@ -17,14 +17,24 @@ steps:
       #!/bin/sh
       echo "Branch Name inside setup and plan step: $BRANCH_NAME"
       if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-        IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
-        for WORKSPACE in "${workspaces[@]}"; do
+        OLD_IFS="$IFS"
+        IFS=','
+        set -f  # Disable glob expansion
+        set -- $WORKSPACES
+        IFS="$OLD_IFS"
+        for WORKSPACE do
           echo "Initializing Terraform for workspace: $WORKSPACE"
           terraform init
-          terraform workspace select $WORKSPACE 2>/dev/null || terraform workspace new $WORKSPACE
+
+          # Create workspace if it doesn't exist
+          if ! terraform workspace select $WORKSPACE; then
+            terraform workspace new $WORKSPACE
+          fi
+
           terraform validate
           terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=tfplan_$WORKSPACE
         done
+        set +f  # Re-enable glob expansion
       else
         echo "Skipping setup and plan on branch $BRANCH_NAME"
       fi
@@ -35,11 +45,16 @@ steps:
       #!/bin/sh
       echo "Branch Name inside apply step: $BRANCH_NAME"
       if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-        IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
-        for WORKSPACE in "${workspaces[@]}"; do
+        OLD_IFS="$IFS"
+        IFS=','
+        set -f  # Disable glob expansion
+        set -- $WORKSPACES
+        IFS="$OLD_IFS"
+        for WORKSPACE do
           echo "Applying Terraform plan for workspace: $WORKSPACE"
           terraform apply -auto-approve tfplan_$WORKSPACE
         done
+        set +f  # Re-enable glob expansion
       else
         echo "Skipping apply on branch $BRANCH_NAME"
       fi
@@ -54,11 +69,16 @@ steps:
         echo "Are you sure you want to destroy all resources? (yes/no): "
         read CONFIRM
         if [ "$CONFIRM" = "yes" ]; then
-          IFS=',' read -r -a workspaces <<< "${_WORKSPACES}"
-          for WORKSPACE in "${workspaces[@]}"; do
+          OLD_IFS="$IFS"
+          IFS=','
+          set -f  # Disable glob expansion
+          set -- $WORKSPACES
+          IFS="$OLD_IFS"
+          for WORKSPACE do
             echo "Destroying resources in workspace: $WORKSPACE"
             terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
           done
+          set +f  # Re-enable glob expansion
         fi
       else
         echo "Destroy operation not allowed on this branch."
