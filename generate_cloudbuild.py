@@ -13,7 +13,7 @@ def generate_cloudbuild():
             'entrypoint': 'bash',
             'args': [
                 '-c',
-                f'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: {pr_number}"; echo "************************"'
+                f'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: ${_PR_NUMBER}"; echo "************************"'
             ]
         }
     ]
@@ -28,7 +28,7 @@ def generate_cloudbuild():
                     '-c',
                     f'''
                     echo "Branch Name inside setup and plan step: $BRANCH_NAME"
-                    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "{pr_number}" ]; then
+                    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "${_PR_NUMBER}" ]; then
                         echo "Processing workspace: {workspace}"
                         terraform init -reconfigure
                         mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
