@@ -10,7 +10,7 @@ def generate_cloudbuild():
         {
             'id': 'branch name',
             'name': 'ubuntu',
-            'entrypoint': 'bash',
+            'entrypoint': 'sh',
             'args': [
                 '-c',
                 f'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull Request: {pr_number}"; echo "************************"'
@@ -23,7 +23,7 @@ def generate_cloudbuild():
             {
                 'id': f'setup and plan {workspace}',
                 'name': f'hashicorp/terraform:{tf_version}',
-                'entrypoint': 'sh',
+                'entrypoint': 'bash',
                 'args': [
                     '-c',
                     f'''
@@ -111,7 +111,12 @@ def generate_cloudbuild():
         ])
 
     cloudbuild = {
-        'steps': steps
+        'steps': steps,
+        'substitutions': {
+            '_TF_VERSION': '1.8',
+            '_WORKSPACES': 'dev,staging,gitops',
+            '_PR_NUMBER': ''
+        }
     }
 
     with open('cloudbuild_generated.yaml', 'w') as file:
@@ -120,4 +125,4 @@ def generate_cloudbuild():
     print("cloudbuild_generated.yaml file generated successfully.")
 
 if __name__ == '__main__':
-    generate_cloudbuild().
+    generate_cloudbuild()
