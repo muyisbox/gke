@@ -54,6 +54,7 @@ steps:
         set +f  # Re-enable glob expansion
       else
         echo "Skipping apply on branch $BRANCH_NAME"
+      fi
 
   - id: 'destroy'
     name: 'hashicorp/terraform:${_TF_VERSION}'
@@ -77,6 +78,7 @@ steps:
         fi
       else
         echo "Destroy operation not allowed on this branch."
+      fi
 
 options:
   dynamicSubstitutions: true
