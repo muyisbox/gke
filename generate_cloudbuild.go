@@ -48,14 +48,25 @@ func main() {
                 echo "Branch Name inside setup and plan step: $BRANCH_NAME"
                 if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "%s" ]; then
                     echo "Processing workspace: %s"
+					
+					mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
                     terraform init -reconfigure
-                    terraform workspace select %s || terraform workspace new %s
+                    
+                    # Create workspace if it doesn't exist
+                    terraform workspace new %s || terraform workspace select %s
+                    
+                    # Wait for state lock
+                    while ! terraform workspace select %s; do
+                        echo "Workspace %s is locked. Waiting for 10 seconds..."
+                        sleep 10
+                    done
+                    
                     terraform validate
                     terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_%s
                 else
                     echo "Skipping setup and plan on branch $BRANCH_NAME"
                 fi
-                `, prNumber, workspace, workspace, workspace, workspace),
+                `, prNumber, workspace, workspace, workspace, workspace, workspace, workspace),
             },
         }, Step{
             ID:         fmt.Sprintf("apply %s", workspace),
@@ -69,12 +80,21 @@ func main() {
                 if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
                     echo "Applying Terraform plan for workspace: %s"
                     terraform init -reconfigure
-                    terraform workspace select %s || terraform workspace new %s
+                    
+                    # Create workspace if it doesn't exist
+                    terraform workspace new %s || terraform workspace select %s
+                    
+                    # Wait for state lock
+                    while ! terraform workspace select %s; do
+                        echo "Workspace %s is locked. Waiting for 10 seconds..."
+                        sleep 10
+                    done
+                    
                     terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_%s
                 else
                     echo "Skipping apply on branch $BRANCH_NAME"
                 fi
-                `, workspace, workspace, workspace, workspace),
+                `, workspace, workspace, workspace, workspace, workspace, workspace),
             },
         }, Step{
             ID:         fmt.Sprintf("destroy %s", workspace),
@@ -89,12 +109,21 @@ func main() {
                     echo "Auto-confirming destruction"
                     echo "Destroying resources in workspace: %s"
                     terraform init -reconfigure
-                    terraform workspace select %s || terraform workspace new %s
+                    
+                    # Create workspace if it doesn't exist
+                    terraform workspace new %s || terraform workspace select %s
+                    
+                    # Wait for state lock
+                    while ! terraform workspace select %s; do
+                        echo "Workspace %s is locked. Waiting for 10 seconds..."
+                        sleep 10
+                    done
+                    
                     terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
                 else
                     echo "Destroy operation not allowed on this branch."
                 fi
-                `, workspace, workspace, workspace),
+                `, workspace, workspace, workspace, workspace, workspace),
             },
         })
     }
