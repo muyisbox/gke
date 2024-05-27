@@ -27,7 +27,7 @@ for workspace in workspaces:
                 f'''
 
                 echo "Branch Name inside setup and plan step: $BRANCH_NAME"
-                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]|| [ -n "$PULL_REQUEST_NUMBER" ]; then
+                if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]|| [ -n "$_PR_NUMBER" ]; then
                     echo "Processing workspace: {workspace}"
                     mkdir -p /workspace/$BUILD_ID  # Create directory for storing plans
                     terraform init -reconfigure
