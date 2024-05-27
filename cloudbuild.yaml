@@ -24,14 +24,15 @@ steps:
         set -- $_WORKSPACES
         IFS="$OLD_IFS"
         for WORKSPACE do
-          echo "Processing workspace: $WORKSPACE"
-          # Initialize Terraform
-          terraform init -reconfigure
-
+        
           # Create workspace if it doesn't exist
           if ! terraform workspace select $WORKSPACE; then
             terraform workspace new $WORKSPACE
           fi
+
+          echo "Processing workspace: $WORKSPACE"
+          # Initialize Terraform
+          terraform init -reconfigure
 
           # Validate Terraform configuration
           terraform validate
