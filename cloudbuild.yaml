@@ -37,7 +37,7 @@ steps:
           terraform validate
 
           # Plan Terraform
-          terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/tfplan_$WORKSPACE
+          terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_$WORKSPACE
           
         done
         set +f  # Re-enable glob expansion
@@ -64,9 +64,9 @@ steps:
           if ! terraform workspace select $WORKSPACE; then
             terraform workspace new $WORKSPACE
           fi
-          
+
           echo "Applying Terraform plan for workspace: $WORKSPACE"
-          terraform apply -auto-approve /workspace/tfplan_$WORKSPACE
+          terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_$WORKSPACE
         done
         set +f  # Re-enable glob expansion
       else
@@ -80,8 +80,7 @@ steps:
       echo "Branch Name inside destroy step: $BRANCH_NAME"
       if [ "$BRANCH_NAME" = "destroy-all" ]; then
         echo "Preparing to destroy all resources..."
-        echo "Are you sure you want to destroy all resources? (yes/no): "
-        read CONFIRM
+        CONFIRM="yes"  # Auto-confirm destruction
         if [ "$CONFIRM" = "yes" ]; then
           echo "Workspaces: ${_WORKSPACES}"
           OLD_IFS="$IFS"
@@ -91,6 +90,7 @@ steps:
           IFS="$OLD_IFS"
           for WORKSPACE do
             echo "Destroying resources in workspace: $WORKSPACE"
+            terraform init -backend-config="bucket=${_GCS_BUCKET}" -backend-config="prefix=terraform/state/$WORKSPACE" -reconfigure
             terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
           done
           set +f  # Re-enable glob expansion
@@ -98,7 +98,6 @@ steps:
       else
         echo "Destroy operation not allowed on this branch."
       fi
-
 
 options:
   dynamicSubstitutions: true
