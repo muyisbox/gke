@@ -121,6 +121,11 @@ steps:
       - |
         pip install pyyaml
         python /workspace/generate_cloudbuild.py
+  - id: 'branch name'
+    name: 'ubuntu'
+    script: |
+      #!/bin/sh
+      env
   - name: 'gcr.io/cloud-builders/gcloud'
     args: ['builds', 'submit', '.', '--config=/workspace/cloudbuild_generated.yaml', '--region=$LOCATION']
 options:
