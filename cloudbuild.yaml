@@ -119,8 +119,8 @@ steps:
     args:
       - '-c'
       - |
-        pip install pyyaml
-        _PR_NUMBER=${_PR_NUMBER} python /workspace/generate_cloudbuild.py
+        pip install --user pyyaml
+        python /workspace/generate_cloudbuild.py
 
   - name: 'golang'
     entrypoint: 'sh'
