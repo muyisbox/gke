@@ -121,6 +121,10 @@ steps:
       - |
         pip install --user pyyaml
         python /workspace/generate_cloudbuild.py
+    env:
+      - 'WORKSPACES=${_WORKSPACES}'
+      - 'TF_VERSION=${_TF_VERSION}'
+      - 'PR_NUMBER=${_PR_NUMBER}'
 
   - name: 'golang'
     entrypoint: 'sh'
@@ -151,7 +155,7 @@ steps:
           --config=/workspace/go_cloudbuild_generated.yaml \
           --region=$LOCATION \
           --git-source-revision=$BRANCH_NAME \
-          --substitutions=^:^BRANCH_NAME=$BRANCH_NAME:_PR_NUMBER=$_PR_NUMBER:_WORKSPACES="dev,staging,gitops":TF_VERSION=${TF_VERSION}
+          --substitutions=BRANCH_NAME=$BRANCH_NAME
 
 options:
   dynamicSubstitutions: true
