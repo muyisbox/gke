@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket = "terraform-310821"
+    bucket = "cluster-dreams-terraform"
     prefix = "terraform/state"
   }
   required_providers {
