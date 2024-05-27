@@ -1,21 +1,24 @@
 
 ## This installs argo into the cluster
 module "argocd" {
-  source = "./modules/helm"
+  source   = "./modules/helm"
+  for_each = contains(["gitops", "dev", "staging"], terraform.workspace) ? toset([terraform.workspace]) : toset([])
 
   namespace  = lookup(local.charts.argocd, "namespace", "default")
   repository = "https://argoproj.github.io/argo-helm"
-  app        = lookup(local.charts.argocd, "app")
+  app        = lookup(local.charts.argocd, "app", null)
   values     = lookup(local.charts.argocd, "values", [])
+
   depends_on = [
     module.gke
   ]
+
 }
 
 
 module "argocd-apps" {
-  source = "./modules/helm"
-
+  source     = "./modules/helm"
+  for_each   = contains(["gitops", "dev", "staging"], terraform.workspace) ? toset([terraform.workspace]) : toset([])
   namespace  = lookup(local.charts.argocd_apps, "namespace", "default")
   repository = "https://argoproj.github.io/argo-helm"
   app        = lookup(local.charts.argocd_apps, "app")
@@ -24,9 +27,4 @@ module "argocd-apps" {
     module.argocd, module.gke
   ]
 }
-
-# resource "kubernetes_manifest" "kuma_mtls" {
-#   manifest   = yamldecode(file("${path.module}/templates/kuma-mtls.yaml"))
-#   depends_on = [module.argocd-apps]
-# }
 

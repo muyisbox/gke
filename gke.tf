@@ -1,11 +1,11 @@
 module "gke" {
-  source                     = "terraform-google-modules/kubernetes-engine/google//modules/beta-private-cluster"
+  source                     = "terraform-google-modules/kubernetes-engine/google//modules/private-cluster"
   project_id                 = var.project_id
-  name                       = "${local.cluster_type}-cluster-${var.cluster_name_suffix}"
+  name                       = "${terraform.workspace}-cluster"
   region                     = var.region
   zones                      = var.zones
-  network                    = var.network
-  subnetwork                 = var.subnetwork
+  network                    = "${var.network}-${terraform.workspace}"
+  subnetwork                 = "${var.subnetwork}-${terraform.workspace}"
   enable_private_nodes       = true
   deletion_protection        = false
   ip_range_pods              = "ip-range-pods"
@@ -26,7 +26,7 @@ module "gke" {
       max_count          = 2
       local_ssd_count    = 0
       spot               = true
-      disk_size_gb       = 40
+      disk_size_gb       = 20
       disk_type          = "pd-standard"
       image_type         = "COS_CONTAINERD"
       enable_gcfs        = false
@@ -46,7 +46,7 @@ module "gke" {
       max_count          = 2
       local_ssd_count    = 0
       spot               = true
-      disk_size_gb       = 40
+      disk_size_gb       = 20
       disk_type          = "pd-standard"
       image_type         = "COS_CONTAINERD"
       enable_gcfs        = false
@@ -66,7 +66,7 @@ module "gke" {
       max_count          = 2
       local_ssd_count    = 0
       spot               = true
-      disk_size_gb       = 40
+      disk_size_gb       = 20
       disk_type          = "pd-standard"
       image_type         = "COS_CONTAINERD"
       enable_gcfs        = false
