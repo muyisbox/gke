@@ -9,6 +9,7 @@
 **/basictf
 kube-bench*
 **/istio/*
+**/misc/*
 
 # .tfstate files
 *.tfstate

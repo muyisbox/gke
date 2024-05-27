@@ -1,6 +1,0 @@
-apiVersion: v2
-name: app_of_apps
-description: A Helm chart to create multiple argocd applications
-type: application
-version: 0.1.0
-appVersion: "0.1.0"
