@@ -74,13 +74,26 @@ def generate_cloudbuild(workspaces, tf_version):
                         echo "Applying Terraform plan for workspace: {workspace}"
                         terraform init -reconfigure
                         
-                        # Create workspace if it doesn't exist
-                        terraform workspace new {workspace} || terraform workspace select {workspace}
-                        
-                        # Wait for state lock
-                        while ! terraform workspace select {workspace}; do
-                            echo "Workspace {workspace} is locked. Waiting for 10 seconds..."
-                            sleep 10
+                        # Wait for state lock with exponential backoff
+                        wait_time=20
+                        max_wait_time=300 # 5 minutes
+                        while true; do
+                            if terraform workspace select {workspace} 2>/dev/null; then
+                                break
+                            elif terraform workspace new {workspace}; then
+                                break
+                            else
+                                echo "Workspace {workspace} is locked or creation failed. Waiting for $wait_time seconds..."
+                                sleep $wait_time
+                                
+                                # Double the wait time for the next iteration
+                                wait_time=$((wait_time * 2))
+                                
+                                # Cap the wait time at the maximum limit
+                                if [ $wait_time -gt $max_wait_time ]; then
+                                    wait_time=$max_wait_time
+                                fi
+                            fi
                         done
                         
                         terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_{workspace} -parallelism=60
@@ -104,13 +117,26 @@ def generate_cloudbuild(workspaces, tf_version):
                         echo "Destroying resources in workspace: {workspace}"
                         terraform init -reconfigure
                         
-                        # Create workspace if it doesn't exist
-                        terraform workspace new {workspace} || terraform workspace select {workspace}
-                        
-                        # Wait for state lock
-                        while ! terraform workspace select {workspace}; do
-                            echo "Workspace {workspace} is locked. Waiting for 10 seconds..."
-                            sleep 10
+                        # Wait for state lock with exponential backoff
+                        wait_time=20
+                        max_wait_time=300 # 5 minutes
+                        while true; do
+                            if terraform workspace select {workspace} 2>/dev/null; then
+                                break
+                            elif terraform workspace new {workspace}; then
+                                break
+                            else
+                                echo "Workspace {workspace} is locked or creation failed. Waiting for $wait_time seconds..."
+                                sleep $wait_time
+                                
+                                # Double the wait time for the next iteration
+                                wait_time=$((wait_time * 2))
+                                
+                                # Cap the wait time at the maximum limit
+                                if [ $wait_time -gt $max_wait_time ]; then
+                                    wait_time=$max_wait_time
+                                fi
+                            fi
                         done
                         
                         terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
