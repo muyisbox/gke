@@ -13,6 +13,9 @@ spec:
     targetRevision: {{$v.version | quote}}
     helm:
       releaseName: {{$v.chart}}
+      {{- if $v.values }}
+      valuesObject: {{ toYaml $v.values | nindent 8}}
+      {{ end }}
   destination:
     server: "https://kubernetes.default.svc"
     namespace: {{ $v.namespace }}
