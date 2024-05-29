@@ -1,0 +1,31 @@
+{{- range $app, $v := .Values.apps }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $app }}
+  namespace: argocd
+spec:
+  project: default
+  source:
+    chart: {{$v.chart}}
+    repoURL: {{$v.url}}
+    targetRevision: {{$v.version | quote}}
+    helm:
+      releaseName: {{$v.chart}}
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: {{ $v.namespace }}
+  syncPolicy:
+    automated: {}
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+    managedNamespaceMetadata:
+      labels: # The labels to set on the application namespace
+        class: ck-8
+        chart: {{$v.chart}}
+      annotations: # The annotations to set on the application namespace
+        kubernetes.io/version: {{$v.version | quote}}
+        istio.io/rev: stable
+{{- end }}
