@@ -9,3 +9,8 @@ apps:
     namespace: vpa
     chart: vpa
     version: 4.4.6
+  error:
+    url: https://charts.fairwinds.com/stable
+    namespace: vpa
+    chart: vpa
+    version: 4.4.6
