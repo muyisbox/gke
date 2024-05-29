@@ -4,7 +4,7 @@ import yaml
 def generate_cloudbuild(workspaces, tf_version):
     steps = [
         {
-            'id': 'branch name',
+            'id': 'branch-name',
             'name': 'ubuntu',
             'entrypoint': 'bash',
             'args': [
@@ -15,9 +15,29 @@ def generate_cloudbuild(workspaces, tf_version):
     ]
 
     for workspace in workspaces:
+        workspace_safe = workspace.replace(' ', '-').lower()
+        wait_time_code = f'''
+        wait_time=20
+        max_wait_time=300 # 5 minutes
+        while true; do
+            if terraform workspace select {workspace_safe} 2>/dev/null; then
+                break
+            elif terraform workspace new {workspace_safe}; then
+                break
+            else
+                echo "Workspace {workspace_safe} is locked or creation failed. Waiting for $wait_time seconds..."
+                sleep $wait_time
+                wait_time=$((wait_time * 2))
+                if [ $wait_time -gt $max_wait_time ]; then
+                    wait_time=$max_wait_time
+                fi
+            fi
+        done
+        '''
+
         steps.extend([
             {
-                'id': f'setup and plan {workspace}',
+                'id': f'setup-and-plan-{workspace_safe}',
                 'name': f'hashicorp/terraform:{tf_version}',
                 'entrypoint': 'sh',
                 'args': [
@@ -25,36 +45,12 @@ def generate_cloudbuild(workspaces, tf_version):
                     f'''
                     echo "Branch Name inside setup and plan step: $BRANCH_NAME"
                     if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "$_PR_NUMBER" ]; then
-                        echo "Processing workspace: {workspace}"
+                        echo "Processing workspace: {workspace_safe}"
                         terraform init -reconfigure
-                        
-                        # Create workspace if it doesn't exist
                         mkdir -p /workspace/$BUILD_ID # Create directory for storing plans
-                        
-                        # Wait for state lock with exponential backoff
-                        wait_time=20
-                        max_wait_time=300 # 5 minutes
-                        while true; do
-                            if terraform workspace select {workspace} 2>/dev/null; then
-                                break
-                            elif terraform workspace new {workspace}; then
-                                break
-                            else
-                                echo "Workspace {workspace} is locked or creation failed. Waiting for $wait_time seconds..."
-                                sleep $wait_time
-                                
-                                # Double the wait time for the next iteration
-                                wait_time=$((wait_time * 2))
-                                
-                                # Cap the wait time at the maximum limit
-                                if [ $wait_time -gt $max_wait_time ]; then
-                                    wait_time=$max_wait_time
-                                fi
-                            fi
-                        done
-                        
+                        {wait_time_code}
                         terraform validate
-                        terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace} -parallelism=60
+                        terraform plan -parallelism=60 -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace_safe}
                     else
                         echo "Skipping setup and plan on branch $BRANCH_NAME"
                     fi
@@ -62,41 +58,19 @@ def generate_cloudbuild(workspaces, tf_version):
                 ]
             },
             {
-                'id': f'apply {workspace}',
+                'id': f'apply-{workspace_safe}',
                 'name': f'hashicorp/terraform:{tf_version}',
-                'waitFor': [f'setup and plan {workspace}'],
+                'waitFor': [f'setup-and-plan-{workspace_safe}'],
                 'entrypoint': 'sh',
                 'args': [
                     '-c',
                     f'''
                     echo "Branch Name inside apply step: $BRANCH_NAME"
                     if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-                        echo "Applying Terraform plan for workspace: {workspace}"
+                        echo "Applying Terraform plan for workspace: {workspace_safe}"
                         terraform init -reconfigure
-                        
-                        # Wait for state lock with exponential backoff
-                        wait_time=20
-                        max_wait_time=300 # 5 minutes
-                        while true; do
-                            if terraform workspace select {workspace} 2>/dev/null; then
-                                break
-                            elif terraform workspace new {workspace}; then
-                                break
-                            else
-                                echo "Workspace {workspace} is locked or creation failed. Waiting for $wait_time seconds..."
-                                sleep $wait_time
-                                
-                                # Double the wait time for the next iteration
-                                wait_time=$((wait_time * 2))
-                                
-                                # Cap the wait time at the maximum limit
-                                if [ $wait_time -gt $max_wait_time ]; then
-                                    wait_time=$max_wait_time
-                                fi
-                            fi
-                        done
-                        
-                        terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_{workspace} -parallelism=60
+                        {wait_time_code}
+                        terraform apply -parallelism=60 -auto-approve /workspace/$BUILD_ID/tfplan_{workspace_safe}
                     else
                         echo "Skipping apply on branch $BRANCH_NAME"
                     fi
@@ -104,7 +78,7 @@ def generate_cloudbuild(workspaces, tf_version):
                 ]
             },
             {
-                'id': f'destroy {workspace}',
+                'id': f'destroy-{workspace_safe}',
                 'name': f'hashicorp/terraform:{tf_version}',
                 'entrypoint': 'sh',
                 'args': [
@@ -112,33 +86,9 @@ def generate_cloudbuild(workspaces, tf_version):
                     f'''
                     echo "Branch Name inside destroy step: $BRANCH_NAME"
                     if [ "$BRANCH_NAME" = "destroy-all" ]; then
-                        echo "Preparing to destroy all resources..."
-                        echo "Auto-confirming destruction"
-                        echo "Destroying resources in workspace: {workspace}"
+                        echo "Destroying resources in workspace: {workspace_safe}"
                         terraform init -reconfigure
-                        
-                        # Wait for state lock with exponential backoff
-                        wait_time=20
-                        max_wait_time=300 # 5 minutes
-                        while true; do
-                            if terraform workspace select {workspace} 2>/dev/null; then
-                                break
-                            elif terraform workspace new {workspace}; then
-                                break
-                            else
-                                echo "Workspace {workspace} is locked or creation failed. Waiting for $wait_time seconds..."
-                                sleep $wait_time
-                                
-                                # Double the wait time for the next iteration
-                                wait_time=$((wait_time * 2))
-                                
-                                # Cap the wait time at the maximum limit
-                                if [ $wait_time -gt $max_wait_time ]; then
-                                    wait_time=$max_wait_time
-                                fi
-                            fi
-                        done
-                        
+                        {wait_time_code}
                         terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
                     else
                         echo "Destroy operation not allowed on this branch."
@@ -160,10 +110,8 @@ def generate_cloudbuild(workspaces, tf_version):
 if __name__ == '__main__':
     workspaces = os.environ['WORKSPACES'].split(',')
     tf_version = os.environ['TF_VERSION']
-
     cloudbuild = generate_cloudbuild(workspaces, tf_version)
-
     with open('cloudbuild_generated.yaml', 'w') as file:
-        yaml.dump(cloudbuild, file)
+        yaml.dump(cloudbuild, file, default_flow_style=False)
 
     print("cloudbuild_generated.yaml file generated successfully.")
