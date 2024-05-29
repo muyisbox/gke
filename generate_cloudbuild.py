@@ -15,17 +15,17 @@ def generate_cloudbuild(workspaces, tf_version):
     ]
 
     for workspace in workspaces:
-        step_id_prefix = workspace.replace(' ', '-').lower()
-        wait_time_code = '''
+        workspace_safe = workspace.replace(' ', '-').lower()
+        wait_time_code = f'''
         wait_time=20
         max_wait_time=300 # 5 minutes
         while true; do
-            if terraform workspace select {workspace} 2>/dev/null; then
+            if terraform workspace select {workspace_safe} 2>/dev/null; then
                 break
-            elif terraform workspace new {workspace}; then
+            elif terraform workspace new {workspace_safe}; then
                 break
             else
-                echo "Workspace {workspace} is locked or creation failed. Waiting for $wait_time seconds..."
+                echo "Workspace {workspace_safe} is locked or creation failed. Waiting for $wait_time seconds..."
                 sleep $wait_time
                 wait_time=$((wait_time * 2))
                 if [ $wait_time -gt $max_wait_time ]; then
@@ -37,7 +37,7 @@ def generate_cloudbuild(workspaces, tf_version):
 
         steps.extend([
             {
-                'id': f'setup-and-plan-{step_id_prefix}',
+                'id': f'setup-and-plan-{workspace_safe}',
                 'name': f'hashicorp/terraform:{tf_version}',
                 'entrypoint': 'sh',
                 'args': [
@@ -45,12 +45,12 @@ def generate_cloudbuild(workspaces, tf_version):
                     f'''
                     echo "Branch Name inside setup and plan step: $BRANCH_NAME"
                     if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "$_PR_NUMBER" ]; then
-                        echo "Processing workspace: {workspace}"
+                        echo "Processing workspace: {workspace_safe}"
                         terraform init -reconfigure
                         mkdir -p /workspace/$BUILD_ID # Create directory for storing plans
                         {wait_time_code}
                         terraform validate
-                        terraform plan -parallelism=60 -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace} 
+                        terraform plan -parallelism=60 -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace_safe}
                     else
                         echo "Skipping setup and plan on branch $BRANCH_NAME"
                     fi
@@ -58,19 +58,19 @@ def generate_cloudbuild(workspaces, tf_version):
                 ]
             },
             {
-                'id': f'apply-{step_id_prefix}',
+                'id': f'apply-{workspace_safe}',
                 'name': f'hashicorp/terraform:{tf_version}',
-                'waitFor': [f'setup-and-plan-{step_id_prefix}'],
+                'waitFor': [f'setup-and-plan-{workspace_safe}'],
                 'entrypoint': 'sh',
                 'args': [
                     '-c',
                     f'''
                     echo "Branch Name inside apply step: $BRANCH_NAME"
                     if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-                        echo "Applying Terraform plan for workspace: {workspace}"
+                        echo "Applying Terraform plan for workspace: {workspace_safe}"
                         terraform init -reconfigure
                         {wait_time_code}
-                        terraform apply -parallelism=60 -auto-approve /workspace/$BUILD_ID/tfplan_{workspace}
+                        terraform apply -parallelism=60 -auto-approve /workspace/$BUILD_ID/tfplan_{workspace_safe}
                     else
                         echo "Skipping apply on branch $BRANCH_NAME"
                     fi
@@ -78,7 +78,7 @@ def generate_cloudbuild(workspaces, tf_version):
                 ]
             },
             {
-                'id': f'destroy-{step_id_prefix}',
+                'id': f'destroy-{workspace_safe}',
                 'name': f'hashicorp/terraform:{tf_version}',
                 'entrypoint': 'sh',
                 'args': [
@@ -86,7 +86,7 @@ def generate_cloudbuild(workspaces, tf_version):
                     f'''
                     echo "Branch Name inside destroy step: $BRANCH_NAME"
                     if [ "$BRANCH_NAME" = "destroy-all" ]; then
-                        echo "Destroying resources in workspace: {workspace}"
+                        echo "Destroying resources in workspace: {workspace_safe}"
                         terraform init -reconfigure
                         {wait_time_code}
                         terraform destroy -auto-approve -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID"
@@ -112,6 +112,6 @@ if __name__ == '__main__':
     tf_version = os.environ['TF_VERSION']
     cloudbuild = generate_cloudbuild(workspaces, tf_version)
     with open('cloudbuild_generated.yaml', 'w') as file:
-        yaml.dump(cloudbuild, file)
+        yaml.dump(cloudbuild, file, default_flow_style=False)
 
     print("cloudbuild_generated.yaml file generated successfully.")
