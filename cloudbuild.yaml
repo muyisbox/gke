@@ -6,7 +6,7 @@ steps:
       - |
         pip install --user pyyaml
         python /workspace/generate_cloudbuild.py
-        cat /workspace/generate_cloudbuild.yaml
+        cat /workspace/generate_cloudbuild.py
     env:
       - 'WORKSPACES=${_WORKSPACES}'
       - 'TF_VERSION=${_TF_VERSION}'
