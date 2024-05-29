@@ -50,7 +50,7 @@ def generate_cloudbuild(workspaces, tf_version):
                         mkdir -p /workspace/$BUILD_ID # Create directory for storing plans
                         {wait_time_code}
                         terraform validate
-                        terraform plan -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace} -parallelism=60
+                        terraform plan -parallelism=60 -var="compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com" -var="project_id=$PROJECT_ID" -out=/workspace/$BUILD_ID/tfplan_{workspace} 
                     else
                         echo "Skipping setup and plan on branch $BRANCH_NAME"
                     fi
@@ -70,7 +70,7 @@ def generate_cloudbuild(workspaces, tf_version):
                         echo "Applying Terraform plan for workspace: {workspace}"
                         terraform init -reconfigure
                         {wait_time_code}
-                        terraform apply -auto-approve /workspace/$BUILD_ID/tfplan_{workspace} -parallelism=60
+                        terraform apply -parallelism=60 -auto-approve /workspace/$BUILD_ID/tfplan_{workspace}
                     else
                         echo "Skipping apply on branch $BRANCH_NAME"
                     fi
