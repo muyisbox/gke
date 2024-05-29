@@ -1,0 +1,11 @@
+apps:
+  prometheus:
+    url: https://prometheus-community.github.io/helm-charts
+    namespace: monitoring
+    chart: kube-prometheus-stack
+    version: 57.2.0
+  vpa:
+    url: https://charts.fairwinds.com/stable
+    namespace: vpa
+    chart: vpa
+    version: 4.4.6
