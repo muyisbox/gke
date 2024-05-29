@@ -1,0 +1,25 @@
+applications: 
+ cluster-apps:
+   namespace: argocd
+   additionalLabels: {}
+   additionalAnnotations: {}
+   finalizers:
+   - resources-finalizer.argocd.argoproj.io
+   project: default
+   source:
+     repoURL: https://github.com/muyisbox/gke.git
+     targetRevision: master
+     path: templates/apps_of_apps
+     helm:
+      valueFiles:
+        - values.yaml
+   destination:
+     server: https://kubernetes.default.svc
+     namespace: argocd
+   syncPolicy:
+     automated:
+       prune: true
+       selfHeal: true
+     syncOptions:
+     - CreateNamespace=true
+     - ServerSideApply=true
