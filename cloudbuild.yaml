@@ -5,6 +5,7 @@ steps:
       - '-c'
       - |
         pip install --user pyyaml yq
+        export PATH=$PATH:/root/.local/bin
         python /workspace/generate_cloudbuild.py
         yq eval -o=yaml /workspace/cloudbuild_generated.yaml > /workspace/cloudbuild_generated.yaml
     env:
