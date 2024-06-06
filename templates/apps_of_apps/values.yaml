@@ -4,8 +4,54 @@ apps:
     namespace: monitoring
     chart: kube-prometheus-stack
     version: 57.2.0
+    values: 
+      alertmanager:
+        alertmanagerSpec:
+          replicas: 2
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                resources:
+                  requests:
+                    storage: 5Gi
+      grafana:
+        additionalDataSources:
+          - name: Loki
+            access: proxy
+            orgId: 1
+            type: loki
+            jsonData:
+              tlsSkipVerify: true
+            url: http://loki-stack.logging.svc.cluster.local:3100
+            version: 1
+      prometheus:
+        prometheusSpec:
+          replicas: 2
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                resources:
+                  requests:
+                    storage: 10Gi
+      prometheusOperator:
+        enabled: true
+        admissionWebhooks:
+          patch:
+            podAnnotations:
+              sidecar.istio.io/inject: "false"
+
   vpa:
     url: https://charts.fairwinds.com/stable
     namespace: vpa
     chart: vpa
     version: 4.4.6
+  bookinfo:
+    url: https://charts.fairwinds.com/stable
+    namespace: bookinfo
+    chart: bookinfo
+    version: 0.1.0
+  cert-manager:
+    url: https://charts.jetstack.io
+    namespace: cert-manager
+    chart: cert-manager
+    version: 1.14.5
