@@ -4,7 +4,7 @@ steps:
     args:
       - '-c'
       - |
-        apt-get update && apt-get install -y jq yq --no-install-recommends
+        apt-get update --no-install-recommends && apt-get install -y jq yq
         pip install --user pyyaml
         python /workspace/generate_cloudbuild.py
         yq eval -o=yaml /workspace/cloudbuild_generated.yaml > /workspace/cloudbuild_generated.yaml
