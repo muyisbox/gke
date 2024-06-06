@@ -4,10 +4,10 @@ steps:
     args:
       - '-c'
       - |
-        apt-get update --no-install-recommends && apt-get install -y jq yq
+        apt-get update --no-install-recommends && apt-get install -y yaml-lint yq
         pip install --user pyyaml
         python /workspace/generate_cloudbuild.py
-        cat /workspace/cloudbuild_generated.yaml | yq eval -o=yaml - > /workspace/cloudbuild_final.yaml
+        yaml-lint -c /workspace/cloudbuild_generated.yaml > /workspace/cloudbuild_generated.yaml
     env:
       - 'WORKSPACES=${_WORKSPACES}'
       - 'TF_VERSION=${_TF_VERSION}'
