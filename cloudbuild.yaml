@@ -7,7 +7,7 @@ steps:
         apt-get update --no-install-recommends && apt-get install -y yq yamllint
         pip install --user pyyaml 
         python /workspace/generate_cloudbuild.py
-        cat /workspace/cloudbuild_generated.yaml | yq -o=yaml . > /workspace/cloudbuild_generated.yaml && \
+        cat /workspace/cloudbuild_generated.yaml | yq > /workspace/cloudbuild_generated.yaml && \
         yamllint /workspace/cloudbuild_generated.yaml
     env:
       - 'WORKSPACES=${_WORKSPACES}'
