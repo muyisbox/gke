@@ -48,6 +48,6 @@ options:
   automapSubstitutions: true
 substitutions:
   _TF_VERSION: '1.8'
-  _WORKSPACES: 'gitops, dev'
+  _WORKSPACES: 'gitops,dev'
   _PR_NUMBER: ''
 # --dict-flag=^:^a=b,c:d=f,g # => {'a': 'b,c', 'd': 'f,g'}
