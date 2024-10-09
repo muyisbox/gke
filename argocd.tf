@@ -15,7 +15,7 @@ module "argocd" {
 
 }
 
-
+# Trigger
 module "argocd-apps" {
   source     = "./modules/helm"
   for_each   = contains(["gitops", "dev", "staging"], terraform.workspace) ? toset([terraform.workspace]) : toset([])

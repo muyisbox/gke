@@ -3,7 +3,7 @@ terraform {
   #   bucket = "terraform-310821"
   #   prefix = "terraform/state"
   # }
-    backend "gcs" {
+  backend "gcs" {
     bucket = "cluster-dreams-terraform"
     prefix = "terraform/state"
   }
