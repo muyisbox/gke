@@ -45,6 +45,9 @@ apps:
     namespace: vpa
     chart: vpa
     version: 4.4.6
+    values:
+      podLabels:
+        sidecar.istio.io/inject: "false"
   bookinfo:
     url: https://charts.fairwinds.com/stable
     namespace: bookinfo
@@ -55,3 +58,4 @@ apps:
     namespace: cert-manager
     chart: cert-manager
     version: 1.14.5
+    disable_istio: true

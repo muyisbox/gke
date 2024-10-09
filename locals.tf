@@ -1,8 +1,8 @@
 locals {
   cluster_types = toset(["gitops", "dev", "staging"])
   subnet_cidrs = {
-    gitops = "10.128.0.0/17"
-    dev = "10.160.0.0/17"
+    gitops  = "10.128.0.0/17"
+    dev     = "10.160.0.0/17"
     staging = "10.192.0.0/17"
   }
   apps = {

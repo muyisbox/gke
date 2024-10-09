@@ -26,8 +26,12 @@ spec:
     - ServerSideApply=true
     managedNamespaceMetadata:
       labels: # The labels to set on the application namespace
-        class: ck-8
         chart: {{$v.chart}}
+        {{- if $v.disable_istio }}
+        istio-injection: "disabled"
+        {{- else }}
+        istio-injection: "enabled"
+        {{- end }}
       annotations: # The annotations to set on the application namespace
         kubernetes.io/version: {{$v.version | quote}}
         istio.io/rev: stable
