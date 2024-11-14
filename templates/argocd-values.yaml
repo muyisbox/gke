@@ -1,6 +1,7 @@
-
-# argocd:
-  ## Globally shared configuration
+global:
+  image:
+    # -- If defined, a repository applied to all Argo CD deployments
+    repository: docker.io/argoproj/argocd
 configs:
   cm:
     exec.enabled: true
