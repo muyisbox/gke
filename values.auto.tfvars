@@ -28,7 +28,7 @@ argocd = {
   }
 }
 
-# ArgoCD Applications Configuration
+# ArgoCD Applications Configuration#
 # Defines the setup for applications managed by ArgoCD.
 argocd_apps = {
   namespace = "argocd" # Kubernetes namespace for ArgoCD applications
