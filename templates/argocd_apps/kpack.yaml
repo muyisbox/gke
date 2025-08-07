@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/buildpacks-community/kpack.git'
-    targetRevision: 'v0.13.3'
+    targetRevision: 'v0.17.0'
     path: 'config'
     kustomize:
       # version: "v5.2.1"  # Ensure you specify the Kustomize version if required
