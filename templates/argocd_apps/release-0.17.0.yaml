@@ -256,6 +256,35 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  name: clusterlifecycles.kpack.io
+spec:
+  group: kpack.io
+  versions:
+  - name: v1alpha2
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Ready
+      type: string
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+  names:
+    kind: ClusterLifecycle
+    listKind: ClusterLifecycleList
+    singular: clusterlifecycle
+    plural: clusterlifecycles
+    categories:
+    - kpack
+  scope: Cluster
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
   name: clusterstacks.kpack.io
 spec:
   group: kpack.io
@@ -371,15 +400,7 @@ metadata:
   name: build-init-image
   namespace: kpack
 data:
-  image: gcr.io/cf-build-service-public/kpack/build-init@sha256:f36ce4c96d829933a86fd9b661c42d00048ccd471d85256f6b5dd4d2a28c3921
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: build-init-windows-image
-  namespace: kpack
-data:
-  image: gcr.io/cf-build-service-public/kpack/build-init-windows@sha256:215240f6310891de7e42a4e5de12b19cff234265efd5404970068a44b27c8065
+  image: ghcr.io/buildpacks-community/kpack/build-init@sha256:d18d4b41d0adaa60cfc739f4946b89cf11fc6177066bb33339ed5ba901a61d70
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -387,7 +408,7 @@ metadata:
   name: build-waiter-image
   namespace: kpack
 data:
-  image: gcr.io/cf-build-service-public/kpack/build-waiter@sha256:6d4c1f4588b68ed59580fab999222a93c5d78d638b0fd57962f5aa3a6ef3c0cb
+  image: ghcr.io/buildpacks-community/kpack/build-waiter@sha256:bce1c722948bc4081c7a02c7438f28ffbfd3bd7327fa94f98b54fa9072afe409
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -395,15 +416,7 @@ metadata:
   name: rebase-image
   namespace: kpack
 data:
-  image: gcr.io/cf-build-service-public/kpack/rebase@sha256:cfd3ff4e5ed075255d991f4b3ae939c1972f53dc27f6f1f725e8a4c6591442ca
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: lifecycle-image
-  namespace: kpack
-data:
-  image: gcr.io/cf-build-service-public/kpack/lifecycle@sha256:199043ac6fd40f772decb804ca92cdcbb22b76cf8db622761e25c39c2925d3b7
+  image: ghcr.io/buildpacks-community/kpack/rebase@sha256:a9db3d06ff7ecf22391268310a9822628ad36ff5c01a1e47c790c3b3b930d375
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -411,15 +424,7 @@ metadata:
   name: completion-image
   namespace: kpack
 data:
-  image: gcr.io/cf-build-service-public/kpack/completion@sha256:db56d99900b5d941cce3575e6e7901b83fc0ac3c673702345ca8ef0b56950e24
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: completion-windows-image
-  namespace: kpack
-data:
-  image: gcr.io/cf-build-service-public/kpack/completion-windows@sha256:6b61606aa6d2314d0861399e221c7c1ca2f110b15c0e5d35f5989b8d7bbd7ac8
+  image: ghcr.io/buildpacks-community/kpack/completion@sha256:7879643c3ec0d841c01ac6b7a8c88a90a048a130c5811cc18031719ba72dc192
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -435,7 +440,7 @@ spec:
     metadata:
       labels:
         app: kpack-controller
-        version: 0.13.3
+        version: 0.17.0
     spec:
       securityContext:
         runAsNonRoot: true
@@ -456,7 +461,7 @@ spec:
           capabilities:
             drop:
             - ALL
-        image: gcr.io/cf-build-service-public/kpack/controller@sha256:f4fc9b950f68227a166543e43f94a24c1fcb281e82a485b6cd50f4a6c584e57e
+        image: ghcr.io/buildpacks-community/kpack/controller@sha256:80e71f484f0aa5f54eb549f5d5e015ac5373c9bc616f12891d676a7e1dfb80bd
         env:
         - name: ENABLE_PRIORITY_CLASSES
           value: "false"
@@ -472,6 +477,8 @@ spec:
           value: config-observability
         - name: METRICS_DOMAIN
           value: kpack.io
+        - name: SCALING_FACTOR
+          value: "1"
         - name: SYSTEM_NAMESPACE
           valueFrom:
             fieldRef:
@@ -482,11 +489,6 @@ spec:
           valueFrom:
             configMapKeyRef:
               name: build-init-image
-              key: image
-        - name: BUILD_INIT_WINDOWS_IMAGE
-          valueFrom:
-            configMapKeyRef:
-              name: build-init-windows-image
               key: image
         - name: BUILD_WAITER_IMAGE
           valueFrom:
@@ -502,11 +504,6 @@ spec:
           valueFrom:
             configMapKeyRef:
               name: completion-image
-              key: image
-        - name: COMPLETION_WINDOWS_IMAGE
-          valueFrom:
-            configMapKeyRef:
-              name: completion-windows-image
               key: image
         resources:
           requests:
@@ -543,6 +540,8 @@ rules:
   - clusterbuilders/status
   - clusterbuildpacks
   - clusterbuildpacks/status
+  - clusterlifecycles
+  - clusterlifecycles/status
   - clusterstores
   - clusterstores/status
   - clusterstacks
@@ -660,6 +659,13 @@ roleRef:
   kind: Role
   name: kpack-controller-local-config
   apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: kpack.io/v1alpha2
+kind: ClusterLifecycle
+metadata:
+  name: default-lifecycle
+spec:
+  image: ghcr.io/buildpacks-community/kpack/lifecycle@sha256:113cb00ddd10676286cdedbcb4cc5b8b159a58908928423e07400d572162d24f
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -868,7 +874,7 @@ spec:
       labels:
         app: kpack-webhook
         role: webhook
-        version: 0.13.3
+        version: 0.17.0
     spec:
       securityContext:
         runAsNonRoot: true
@@ -889,7 +895,7 @@ spec:
           capabilities:
             drop:
             - ALL
-        image: gcr.io/cf-build-service-public/kpack/webhook@sha256:4976229a6064daf3434233efd1eddb484d63ee04b9682b2f6ddd97b9d1c1213e
+        image: ghcr.io/buildpacks-community/kpack/webhook@sha256:43fc8706c744f4686cc81d10dddc0ab9cd222d7d885904f3d6cc9c184a73cd84
         ports:
         - name: https-webhook
           containerPort: 8443
