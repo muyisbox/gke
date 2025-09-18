@@ -1,7 +1,6 @@
 steps:
-- name: ubuntu:22.04
+- name: gcr.io/cloud-builders/bash
   id: environment-info
-  entrypoint: bash
   args:
   - -c
   - "\n                echo \"=== Build Environment Information ===\"\n          \
@@ -700,13 +699,12 @@ steps:
     \ allowed on branch $BRANCH_NAME\"\n                    fi\n                 \
     \   "
   timeout: 1800s
-- name: ubuntu:22.04
+- name: gcr.io/cloud-builders/bash
   id: build-summary
   waitFor:
   - apply-gitops
   - apply-dev
   - apply-staging
-  entrypoint: bash
   args:
   - -c
   - "\n                echo \"=== Build Summary ===\"\n                if [ -f \"\
