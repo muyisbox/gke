@@ -16,9 +16,121 @@ steps:
     \         echo \"WORKSPACES=${_WORKSPACES:-}\" >> $BUILD_ID-status.env\n   \
     \             "
   timeout: 60s
+
+# Security Scanning Steps
+- name: aquasec/trivy:latest
+  id: trivy-fs-scan
+  entrypoint: trivy
+  args:
+  - 'fs'
+  - '--format'
+  - 'sarif'
+  - '--output'
+  - 'trivy-fs-results.sarif'
+  - '--severity'
+  - 'HIGH,CRITICAL'
+  - '--exit-code'
+  - '1'
+  - '.'
+  env:
+  - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
+  timeout: 300s
+
+- name: aquasec/trivy:latest
+  id: trivy-config-scan
+  entrypoint: trivy
+  args:
+  - 'config'
+  - '--format'
+  - 'table'
+  - '--exit-code'
+  - '1'
+  - '--severity'
+  - 'HIGH,CRITICAL'
+  - '--namespaces'
+  - 'builtin,appshield'
+  - '.'
+  env:
+  - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
+  timeout: 300s
+
+- name: bridgecrew/checkov:latest
+  id: checkov-scan
+  entrypoint: checkov
+  args:
+  - '--directory'
+  - '.'
+  - '--framework'
+  - 'terraform'
+  - '--output'
+  - 'sarif'
+  - '--output-file-path'
+  - 'checkov-results.sarif'
+  - '--hard-fail-on'
+  - 'HIGH,CRITICAL'
+  - '--quiet'
+  timeout: 300s
+
+- name: python:3.11-alpine
+  id: security-report
+  entrypoint: python3
+  args:
+  - -c
+  - |
+    import json
+    import os
+    import sys
+    from pathlib import Path
+
+    print("=== Security Scan Summary ===")
+
+    # Check if any security files exist
+    trivy_fs = Path("trivy-fs-results.sarif")
+    checkov_results = Path("checkov-results.sarif")
+
+    issues_found = False
+
+    if trivy_fs.exists():
+        print("✅ Trivy filesystem scan completed")
+        with open(trivy_fs) as f:
+            data = json.load(f)
+            if data.get("runs", [{}])[0].get("results"):
+                issues_found = True
+                print("⚠️  Trivy found security issues")
+    else:
+        print("⚠️  Trivy filesystem scan results not found")
+
+    if checkov_results.exists():
+        print("✅ Checkov scan completed")
+        with open(checkov_results) as f:
+            data = json.load(f)
+            if data.get("runs", [{}])[0].get("results"):
+                issues_found = True
+                print("⚠️  Checkov found security issues")
+    else:
+        print("⚠️  Checkov scan results not found")
+
+    # Write security status to build env
+    status = "FAILED" if issues_found else "PASSED"
+    with open(f"{os.environ.get('BUILD_ID', 'build')}-status.env", "a") as f:
+        f.write(f"SECURITY_SCAN_STATUS={status}\n")
+
+    print(f"Security scan status: {status}")
+    print("================================")
+
+    # Exit with error if critical issues found
+    if issues_found:
+        print("❌ Critical security issues found - see scan results above")
+        sys.exit(1)
+    else:
+        print("✅ No critical security issues found")
+  timeout: 120s
+
 - id: setup-gitops
   name: hashicorp/terraform:1.11
-  entrypoint: bash
+  waitFor:
+  - security-report
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -69,7 +181,7 @@ steps:
   name: hashicorp/terraform:1.11
   waitFor:
   - setup-gitops
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -126,7 +238,7 @@ steps:
   name: hashicorp/terraform:1.11
   waitFor:
   - plan-gitops
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -184,7 +296,7 @@ steps:
   timeout: 2400s
 - id: destroy-gitops
   name: hashicorp/terraform:1.11
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -224,10 +336,9 @@ steps:
     \ != \"destroy-all\" ] && [ \"$BRANCH_NAME\" != \"cleanup\" ]; then\n    echo\
     \ \"Error: Destroy operations are only allowed on 'destroy-all' or 'cleanup' branches\"\
     \n    echo \"Current branch: $BRANCH_NAME\"\n    exit 1\nfi\n\n# Additional confirmation\
-    \ for production workspaces\nif [[ \"$workspace_name\" == *\"prod\"* ]] || [[\
-    \ \"$workspace_name\" == *\"production\"* ]]; then\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
+    \ for production workspaces\ncase \"$workspace_name\" in *prod*|*production*)\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
     \ ]; then\n        echo \"Error: Production workspace destruction requires CONFIRM_DESTROY_PROD=true\"\
-    \n        exit 1\n    fi\nfi\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
+    \n        exit 1\n    fi\n    ;;\nesac\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
     \ backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\
     \n\n# Show what will be destroyed\necho \"Resources to be destroyed:\"\nterraform\
     \ plan -destroy \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
@@ -246,7 +357,9 @@ steps:
   timeout: 1800s
 - id: setup-dev
   name: hashicorp/terraform:1.11
-  entrypoint: bash
+  waitFor:
+  - security-report
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -297,7 +410,7 @@ steps:
   name: hashicorp/terraform:1.11
   waitFor:
   - setup-dev
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -354,7 +467,7 @@ steps:
   name: hashicorp/terraform:1.11
   waitFor:
   - plan-dev
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -412,7 +525,7 @@ steps:
   timeout: 2400s
 - id: destroy-dev
   name: hashicorp/terraform:1.11
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -452,10 +565,9 @@ steps:
     \ != \"destroy-all\" ] && [ \"$BRANCH_NAME\" != \"cleanup\" ]; then\n    echo\
     \ \"Error: Destroy operations are only allowed on 'destroy-all' or 'cleanup' branches\"\
     \n    echo \"Current branch: $BRANCH_NAME\"\n    exit 1\nfi\n\n# Additional confirmation\
-    \ for production workspaces\nif [[ \"$workspace_name\" == *\"prod\"* ]] || [[\
-    \ \"$workspace_name\" == *\"production\"* ]]; then\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
+    \ for production workspaces\ncase \"$workspace_name\" in *prod*|*production*)\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
     \ ]; then\n        echo \"Error: Production workspace destruction requires CONFIRM_DESTROY_PROD=true\"\
-    \n        exit 1\n    fi\nfi\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
+    \n        exit 1\n    fi\n    ;;\nesac\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
     \ backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\
     \n\n# Show what will be destroyed\necho \"Resources to be destroyed:\"\nterraform\
     \ plan -destroy \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
@@ -474,7 +586,7 @@ steps:
   timeout: 1800s
 - id: setup-staging
   name: hashicorp/terraform:1.11
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -525,7 +637,7 @@ steps:
   name: hashicorp/terraform:1.11
   waitFor:
   - setup-staging
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -582,7 +694,7 @@ steps:
   name: hashicorp/terraform:1.11
   waitFor:
   - plan-staging
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -640,7 +752,7 @@ steps:
   timeout: 2400s
 - id: destroy-staging
   name: hashicorp/terraform:1.11
-  entrypoint: bash
+  entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
   args:
@@ -680,10 +792,9 @@ steps:
     \ != \"destroy-all\" ] && [ \"$BRANCH_NAME\" != \"cleanup\" ]; then\n    echo\
     \ \"Error: Destroy operations are only allowed on 'destroy-all' or 'cleanup' branches\"\
     \n    echo \"Current branch: $BRANCH_NAME\"\n    exit 1\nfi\n\n# Additional confirmation\
-    \ for production workspaces\nif [[ \"$workspace_name\" == *\"prod\"* ]] || [[\
-    \ \"$workspace_name\" == *\"production\"* ]]; then\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
+    \ for production workspaces\ncase \"$workspace_name\" in *prod*|*production*)\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
     \ ]; then\n        echo \"Error: Production workspace destruction requires CONFIRM_DESTROY_PROD=true\"\
-    \n        exit 1\n    fi\nfi\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
+    \n        exit 1\n    fi\n    ;;\nesac\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
     \ backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\
     \n\n# Show what will be destroyed\necho \"Resources to be destroyed:\"\nterraform\
     \ plan -destroy \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
