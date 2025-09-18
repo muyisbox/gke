@@ -851,4 +851,3 @@ artifacts:
     paths:
     - $BUILD_ID-status.env
     - $BUILD_ID-plan-summary.txt
-    - /tmp/terraform_*_$BUILD_ID.*
