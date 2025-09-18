@@ -469,6 +469,11 @@ fi
                 'steps': steps,
                 'timeout': self.timeout,
                 'options': self.build_options,
+                'substitutions': {
+                    '_PR_NUMBER': '',
+                    '_WORKSPACE': 'default',
+                    '_TERRAFORM_VERSION': self.tf_version
+                },
                 'availableSecrets': {
                     'secretManager': [
                         {
@@ -518,7 +523,7 @@ def main():
         cloudbuild_config = generator.generate_cloudbuild_config(workspaces)
         
         # Write configuration file
-        output_file = Path('cloudbuild_generated.yaml')
+        output_file = Path('cloudbuild.yaml')
         with output_file.open('w') as file:
             yaml.dump(
                 cloudbuild_config,

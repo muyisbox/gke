@@ -1,0 +1,211 @@
+options:
+  substitutionOption: ALLOW_LOOSE
+steps:
+- args:
+  - -c
+  - 'echo "************************"; echo "Branch Name: $BRANCH_NAME"; echo "Pull
+    Request: $_PR_NUMBER"; echo "************************"'
+  entrypoint: bash
+  id: branch-name
+  name: ubuntu
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside setup and plan step: $BRANCH_NAME\"\
+    \n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ] || [ -n \"$_PR_NUMBER\" ]; then\n                        echo\
+    \ \"Processing workspace: gitops\"\n                        terraform init -reconfigure\n\
+    \                        mkdir -p /workspace/$BUILD_ID # Create directory for\
+    \ storing plans\n                        \n        wait_time=20\n        max_wait_time=300\
+    \ # 5 minutes\n        while true; do\n            if terraform workspace select\
+    \ gitops 2>/dev/null; then\n                break\n            elif terraform\
+    \ workspace new gitops; then\n                break\n            else\n      \
+    \          echo \"Workspace gitops is locked or creation failed. Waiting for $wait_time\
+    \ seconds...\"\n                sleep $wait_time\n                wait_time=$((wait_time\
+    \ * 2))\n                if [ $wait_time -gt $max_wait_time ]; then\n        \
+    \            wait_time=$max_wait_time\n                fi\n            fi\n  \
+    \      done\n        \n                        terraform validate\n          \
+    \              terraform plan -parallelism=60 -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ -var=\"project_id=$PROJECT_ID\" -out=/workspace/$BUILD_ID/tfplan_gitops\n  \
+    \                  else\n                        echo \"Skipping setup and plan\
+    \ on branch $BRANCH_NAME\"\n                    fi\n                    "
+  entrypoint: sh
+  id: setup-and-plan-gitops
+  name: hashicorp/terraform:1.11
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside apply step: $BRANCH_NAME\"\n\
+    \                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ]; then\n                        echo \"Applying Terraform plan\
+    \ for workspace: gitops\"\n                        terraform init -reconfigure\n\
+    \                        \n        wait_time=20\n        max_wait_time=300 # 5\
+    \ minutes\n        while true; do\n            if terraform workspace select gitops\
+    \ 2>/dev/null; then\n                break\n            elif terraform workspace\
+    \ new gitops; then\n                break\n            else\n                echo\
+    \ \"Workspace gitops is locked or creation failed. Waiting for $wait_time seconds...\"\
+    \n                sleep $wait_time\n                wait_time=$((wait_time * 2))\n\
+    \                if [ $wait_time -gt $max_wait_time ]; then\n                \
+    \    wait_time=$max_wait_time\n                fi\n            fi\n        done\n\
+    \        \n                        terraform apply -parallelism=60 -auto-approve\
+    \ /workspace/$BUILD_ID/tfplan_gitops\n                    else\n             \
+    \           echo \"Skipping apply on branch $BRANCH_NAME\"\n                 \
+    \   fi\n                    "
+  entrypoint: sh
+  id: apply-gitops
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - setup-and-plan-gitops
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside destroy step: $BRANCH_NAME\"\n\
+    \                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ]; then\n       \
+    \                 echo \"Destroying resources in workspace: gitops\"\n       \
+    \                 terraform init -reconfigure\n                        \n    \
+    \    wait_time=20\n        max_wait_time=300 # 5 minutes\n        while true;\
+    \ do\n            if terraform workspace select gitops 2>/dev/null; then\n   \
+    \             break\n            elif terraform workspace new gitops; then\n \
+    \               break\n            else\n                echo \"Workspace gitops\
+    \ is locked or creation failed. Waiting for $wait_time seconds...\"\n        \
+    \        sleep $wait_time\n                wait_time=$((wait_time * 2))\n    \
+    \            if [ $wait_time -gt $max_wait_time ]; then\n                    wait_time=$max_wait_time\n\
+    \                fi\n            fi\n        done\n        \n                \
+    \        terraform destroy -auto-approve -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ -var=\"project_id=$PROJECT_ID\"\n                    else\n                \
+    \        echo \"Destroy operation not allowed on this branch.\"\n            \
+    \        fi\n                    "
+  entrypoint: sh
+  id: destroy-gitops
+  name: hashicorp/terraform:1.11
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside setup and plan step: $BRANCH_NAME\"\
+    \n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ] || [ -n \"$_PR_NUMBER\" ]; then\n                        echo\
+    \ \"Processing workspace: dev\"\n                        terraform init -reconfigure\n\
+    \                        mkdir -p /workspace/$BUILD_ID # Create directory for\
+    \ storing plans\n                        \n        wait_time=20\n        max_wait_time=300\
+    \ # 5 minutes\n        while true; do\n            if terraform workspace select\
+    \ dev 2>/dev/null; then\n                break\n            elif terraform workspace\
+    \ new dev; then\n                break\n            else\n                echo\
+    \ \"Workspace dev is locked or creation failed. Waiting for $wait_time seconds...\"\
+    \n                sleep $wait_time\n                wait_time=$((wait_time * 2))\n\
+    \                if [ $wait_time -gt $max_wait_time ]; then\n                \
+    \    wait_time=$max_wait_time\n                fi\n            fi\n        done\n\
+    \        \n                        terraform validate\n                      \
+    \  terraform plan -parallelism=60 -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ -var=\"project_id=$PROJECT_ID\" -out=/workspace/$BUILD_ID/tfplan_dev\n     \
+    \               else\n                        echo \"Skipping setup and plan on\
+    \ branch $BRANCH_NAME\"\n                    fi\n                    "
+  entrypoint: sh
+  id: setup-and-plan-dev
+  name: hashicorp/terraform:1.11
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside apply step: $BRANCH_NAME\"\n\
+    \                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ]; then\n                        echo \"Applying Terraform plan\
+    \ for workspace: dev\"\n                        terraform init -reconfigure\n\
+    \                        \n        wait_time=20\n        max_wait_time=300 # 5\
+    \ minutes\n        while true; do\n            if terraform workspace select dev\
+    \ 2>/dev/null; then\n                break\n            elif terraform workspace\
+    \ new dev; then\n                break\n            else\n                echo\
+    \ \"Workspace dev is locked or creation failed. Waiting for $wait_time seconds...\"\
+    \n                sleep $wait_time\n                wait_time=$((wait_time * 2))\n\
+    \                if [ $wait_time -gt $max_wait_time ]; then\n                \
+    \    wait_time=$max_wait_time\n                fi\n            fi\n        done\n\
+    \        \n                        terraform apply -parallelism=60 -auto-approve\
+    \ /workspace/$BUILD_ID/tfplan_dev\n                    else\n                \
+    \        echo \"Skipping apply on branch $BRANCH_NAME\"\n                    fi\n\
+    \                    "
+  entrypoint: sh
+  id: apply-dev
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - setup-and-plan-dev
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside destroy step: $BRANCH_NAME\"\n\
+    \                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ]; then\n       \
+    \                 echo \"Destroying resources in workspace: dev\"\n          \
+    \              terraform init -reconfigure\n                        \n       \
+    \ wait_time=20\n        max_wait_time=300 # 5 minutes\n        while true; do\n\
+    \            if terraform workspace select dev 2>/dev/null; then\n           \
+    \     break\n            elif terraform workspace new dev; then\n            \
+    \    break\n            else\n                echo \"Workspace dev is locked or\
+    \ creation failed. Waiting for $wait_time seconds...\"\n                sleep\
+    \ $wait_time\n                wait_time=$((wait_time * 2))\n                if\
+    \ [ $wait_time -gt $max_wait_time ]; then\n                    wait_time=$max_wait_time\n\
+    \                fi\n            fi\n        done\n        \n                \
+    \        terraform destroy -auto-approve -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ -var=\"project_id=$PROJECT_ID\"\n                    else\n                \
+    \        echo \"Destroy operation not allowed on this branch.\"\n            \
+    \        fi\n                    "
+  entrypoint: sh
+  id: destroy-dev
+  name: hashicorp/terraform:1.11
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside setup and plan step: $BRANCH_NAME\"\
+    \n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ] || [ -n \"$_PR_NUMBER\" ]; then\n                        echo\
+    \ \"Processing workspace: staging\"\n                        terraform init -reconfigure\n\
+    \                        mkdir -p /workspace/$BUILD_ID # Create directory for\
+    \ storing plans\n                        \n        wait_time=20\n        max_wait_time=300\
+    \ # 5 minutes\n        while true; do\n            if terraform workspace select\
+    \ staging 2>/dev/null; then\n                break\n            elif terraform\
+    \ workspace new staging; then\n                break\n            else\n     \
+    \           echo \"Workspace staging is locked or creation failed. Waiting for\
+    \ $wait_time seconds...\"\n                sleep $wait_time\n                wait_time=$((wait_time\
+    \ * 2))\n                if [ $wait_time -gt $max_wait_time ]; then\n        \
+    \            wait_time=$max_wait_time\n                fi\n            fi\n  \
+    \      done\n        \n                        terraform validate\n          \
+    \              terraform plan -parallelism=60 -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ -var=\"project_id=$PROJECT_ID\" -out=/workspace/$BUILD_ID/tfplan_staging\n \
+    \                   else\n                        echo \"Skipping setup and plan\
+    \ on branch $BRANCH_NAME\"\n                    fi\n                    "
+  entrypoint: sh
+  id: setup-and-plan-staging
+  name: hashicorp/terraform:1.11
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside apply step: $BRANCH_NAME\"\n\
+    \                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ]; then\n                        echo \"Applying Terraform plan\
+    \ for workspace: staging\"\n                        terraform init -reconfigure\n\
+    \                        \n        wait_time=20\n        max_wait_time=300 # 5\
+    \ minutes\n        while true; do\n            if terraform workspace select staging\
+    \ 2>/dev/null; then\n                break\n            elif terraform workspace\
+    \ new staging; then\n                break\n            else\n               \
+    \ echo \"Workspace staging is locked or creation failed. Waiting for $wait_time\
+    \ seconds...\"\n                sleep $wait_time\n                wait_time=$((wait_time\
+    \ * 2))\n                if [ $wait_time -gt $max_wait_time ]; then\n        \
+    \            wait_time=$max_wait_time\n                fi\n            fi\n  \
+    \      done\n        \n                        terraform apply -parallelism=60\
+    \ -auto-approve /workspace/$BUILD_ID/tfplan_staging\n                    else\n\
+    \                        echo \"Skipping apply on branch $BRANCH_NAME\"\n    \
+    \                fi\n                    "
+  entrypoint: sh
+  id: apply-staging
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - setup-and-plan-staging
+- args:
+  - -c
+  - "\n                    echo \"Branch Name inside destroy step: $BRANCH_NAME\"\n\
+    \                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ]; then\n       \
+    \                 echo \"Destroying resources in workspace: staging\"\n      \
+    \                  terraform init -reconfigure\n                        \n   \
+    \     wait_time=20\n        max_wait_time=300 # 5 minutes\n        while true;\
+    \ do\n            if terraform workspace select staging 2>/dev/null; then\n  \
+    \              break\n            elif terraform workspace new staging; then\n\
+    \                break\n            else\n                echo \"Workspace staging\
+    \ is locked or creation failed. Waiting for $wait_time seconds...\"\n        \
+    \        sleep $wait_time\n                wait_time=$((wait_time * 2))\n    \
+    \            if [ $wait_time -gt $max_wait_time ]; then\n                    wait_time=$max_wait_time\n\
+    \                fi\n            fi\n        done\n        \n                \
+    \        terraform destroy -auto-approve -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ -var=\"project_id=$PROJECT_ID\"\n                    else\n                \
+    \        echo \"Destroy operation not allowed on this branch.\"\n            \
+    \        fi\n                    "
+  entrypoint: sh
+  id: destroy-staging
+  name: hashicorp/terraform:1.11

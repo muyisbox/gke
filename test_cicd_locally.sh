@@ -137,12 +137,12 @@ test_python_script() {
             log_success "Python script executed successfully"
             
             # Check if output file was created
-            if [ -f "cloudbuild_generated.yaml" ]; then
+            if [ -f "cloudbuild.yaml" ]; then
                 log_success "Generated YAML file created"
                 
                 # Display basic stats
-                local steps_count=$(yq eval '.steps | length' cloudbuild_generated.yaml)
-                local timeout=$(yq eval '.timeout' cloudbuild_generated.yaml)
+                local steps_count=$(yq eval '.steps | length' cloudbuild.yaml)
+                local timeout=$(yq eval '.timeout' cloudbuild.yaml)
                 echo "  Generated steps: $steps_count"
                 echo "  Timeout: $timeout"
                 
@@ -165,13 +165,13 @@ test_python_script() {
 validate_generated_yaml() {
     log_info "Validating generated YAML..."
     
-    if [ ! -f "cloudbuild_generated.yaml" ]; then
-        log_error "cloudbuild_generated.yaml not found"
+    if [ ! -f "cloudbuild.yaml" ]; then
+        log_error "cloudbuild.yaml not found"
         return 1
     fi
     
     # Validate YAML syntax
-    if python3 -m yamllint -d relaxed cloudbuild_generated.yaml; then
+    if python3 -m yamllint -d relaxed cloudbuild.yaml; then
         log_success "YAML syntax validation passed"
     else
         log_error "YAML syntax validation failed"
@@ -179,7 +179,7 @@ validate_generated_yaml() {
     fi
     
     # Validate YAML structure
-    if yq eval '.' cloudbuild_generated.yaml > /dev/null; then
+    if yq eval '.' cloudbuild.yaml > /dev/null; then
         log_success "YAML structure validation passed"
     else
         log_error "YAML structure validation failed"
@@ -194,7 +194,7 @@ validate_generated_yaml() {
     )
     
     for field in "${checks[@]}"; do
-        if yq eval ".$field" cloudbuild_generated.yaml | grep -q "null"; then
+        if yq eval ".$field" cloudbuild.yaml | grep -q "null"; then
             log_error "Required field '$field' is missing or null"
             return 1
         else
@@ -268,13 +268,13 @@ test_cloudbuild_yaml() {
     log_info "Testing Cloud Build YAML configurations..."
     
     # Test improved cloudbuild.yaml
-    if [ -f "cloudbuild_improved.yaml" ]; then
-        log_info "Validating cloudbuild_improved.yaml..."
+    if [ -f "cloudbuild.yaml" ]; then
+        log_info "Validating cloudbuild.yaml..."
         
-        if python3 -m yamllint -d relaxed cloudbuild_improved.yaml; then
-            log_success "cloudbuild_improved.yaml syntax is valid"
+        if python3 -m yamllint -d relaxed cloudbuild.yaml; then
+            log_success "cloudbuild.yaml syntax is valid"
         else
-            log_error "cloudbuild_improved.yaml syntax validation failed"
+            log_error "cloudbuild.yaml syntax validation failed"
             return 1
         fi
         
@@ -287,7 +287,7 @@ test_cloudbuild_yaml() {
         )
         
         for field in "${cb_checks[@]}"; do
-            if yq eval ".$field" cloudbuild_improved.yaml | grep -q "null"; then
+            if yq eval ".$field" cloudbuild.yaml | grep -q "null"; then
                 log_error "Required Cloud Build field '$field' is missing"
                 return 1
             else
@@ -295,7 +295,7 @@ test_cloudbuild_yaml() {
             fi
         done
     else
-        log_error "cloudbuild_improved.yaml not found"
+        log_error "cloudbuild.yaml not found"
         return 1
     fi
     

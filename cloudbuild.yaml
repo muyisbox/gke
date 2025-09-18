@@ -1,53 +1,715 @@
 steps:
-  - name: 'python:3.12'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        apt-get update --no-install-recommends && apt-get install -y yq yamllint
-        pip install --user pyyaml 
-        python /workspace/generate_cloudbuild.py
-        cat /workspace/cloudbuild_generated.yaml | yq 
-    env:
-      - 'WORKSPACES=${_WORKSPACES}'
-      - 'TF_VERSION=${_TF_VERSION}'
-
-  # - name: 'golang'
-  #   entrypoint: 'sh'
-  #   args:
-  #     - '-c'
-  #     - |
-  #       go mod init github.com/username/cloudbuild-generator
-  #       go get gopkg.in/yaml.v3
-  #       _PR_NUMBER=${_PR_NUMBER} go run generate_cloudbuild.go
-
-  - name: 'gcr.io/cloud-builders/gcloud'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        gcloud builds submit https://github.com/$REPO_FULL_NAME \
-          --config=/workspace/cloudbuild_generated.yaml \
-          --region=$LOCATION \
-          --git-source-revision=$BRANCH_NAME \
-          --substitutions=^:^BRANCH_NAME=$BRANCH_NAME:_PR_NUMBER=${_PR_NUMBER}
-
-  # - name: 'gcr.io/cloud-builders/gcloud'
-  #   entrypoint: 'sh'
-  #   args:
-  #     - '-c'
-  #     - |
-  #       gcloud builds submit https://github.com/$REPO_FULL_NAME \
-  #         --config=/workspace/go_cloudbuild_generated.yaml \
-  #         --region=$LOCATION \
-  #         --git-source-revision=$BRANCH_NAME \
-  #         --substitutions=BRANCH_NAME=$BRANCH_NAME
-
+- name: ubuntu:22.04
+  id: environment-info
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                echo \"=== Build Environment Information ===\"\n          \
+    \      echo \"Build ID: $BUILD_ID\"\n                echo \"Branch Name: $BRANCH_NAME\"\
+    \n                echo \"Pull Request: ${{_PR_NUMBER:-'N/A'}}\"\n            \
+    \    echo \"Project ID: $PROJECT_ID\"\n                echo \"Region: ${LOCATION:-'N/A'}\"\
+    \n                echo \"Trigger Name: ${TRIGGER_NAME:-'N/A'}\"\n            \
+    \    echo \"Repository: ${REPO_FULL_NAME:-'N/A'}\"\n                echo \"Commit\
+    \ SHA: ${COMMIT_SHA:-'N/A'}\"\n                echo \"==================================\"\
+    \n                \n                # Create status tracking file\n          \
+    \      echo \"BUILD_START=$(date -Iseconds)\" > $BUILD_ID-status.env\n       \
+    \         echo \"WORKSPACES=${{_WORKSPACES}}\" >> $BUILD_ID-status.env\n     \
+    \           "
+  timeout: 60s
+- id: setup-gitops
+  name: hashicorp/terraform:1.11
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    echo \"Setting up workspace: gitops\"\n               \
+    \     \n                    # Branch protection\n                    if [ \"$BRANCH_NAME\"\
+    \ = \"main\" ] || [ \"$BRANCH_NAME\" = \"master\" ] || [ -n \"${_PR_NUMBER:-}\"\
+    \ ]; then\n                        \nset -euo pipefail  # Exit on error, undefined\
+    \ variables, pipe failures\n\n# Workspace management with exponential backoff\n\
+    setup_workspace() {\n    local workspace_name=\"gitops\"\n    local wait_time=5\n\
+    \    local max_wait_time=120\n    local max_attempts=10\n    local attempt=1\n\
+    \    \n    echo \"Setting up workspace: $workspace_name\"\n    \n    while [ $attempt\
+    \ -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts to setup\
+    \ workspace\"\n        \n        # Try to select existing workspace\n        if\
+    \ terraform workspace select \"$workspace_name\" 2>/dev/null; then\n         \
+    \   echo \"Successfully selected existing workspace: $workspace_name\"\n     \
+    \       return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\necho \"Running Terraform validation...\"\n\n# Check Terraform\
+    \ configuration syntax\necho \"Checking configuration syntax...\"\nterraform validate\n\
+    \n# Check for formatting issues\necho \"Checking formatting...\"\nif ! terraform\
+    \ fmt -check -recursive; then\n    echo \"Warning: Terraform files are not properly\
+    \ formatted\"\n    echo \"Run 'terraform fmt -recursive' to fix formatting issues\"\
+    \nfi\n\n# Security scan (if tfsec is available)\nif command -v tfsec &> /dev/null;\
+    \ then\n    echo \"Running security scan...\"\n    tfsec . --soft-fail\nfi\n\n\
+    echo \"Validation completed successfully\"\n\n                    else\n     \
+    \                   echo \"Skipping setup on branch $BRANCH_NAME\"\n         \
+    \               exit 0\n                    fi\n                    "
+  timeout: 600s
+- id: plan-gitops
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - setup-gitops
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ] || [ -n \"${_PR_NUMBER:-}\" ]; then\n                       \
+    \ echo \"Creating plan for workspace: gitops\"\n                        \nset\
+    \ -euo pipefail  # Exit on error, undefined variables, pipe failures\n\n# Workspace\
+    \ management with exponential backoff\nsetup_workspace() {\n    local workspace_name=\"\
+    gitops\"\n    local wait_time=5\n    local max_wait_time=120\n    local max_attempts=10\n\
+    \    local attempt=1\n    \n    echo \"Setting up workspace: $workspace_name\"\
+    \n    \n    while [ $attempt -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts\
+    \ to setup workspace\"\n        \n        # Try to select existing workspace\n\
+    \        if terraform workspace select \"$workspace_name\" 2>/dev/null; then\n\
+    \            echo \"Successfully selected existing workspace: $workspace_name\"\
+    \n            return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"gitops\"\nplan_file=\"/workspace/$BUILD_ID/tfplan_gitops\"\
+    \nplan_output=\"/tmp/plan_output_${workspace_name}.txt\"\n\necho \"Creating Terraform\
+    \ plan for workspace: $workspace_name\"\n\n# Create plan directory\nmkdir -p \"\
+    $(dirname \"$plan_file\")\"\n\n# Generate plan with detailed output\nterraform\
+    \ plan \\\n    -detailed-exitcode \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\" \\\n    -out=\"$plan_file\" \\\n   \
+    \ | tee \"$plan_output\"\n\n# Check plan exit code\nplan_exit_code=$?\n\ncase\
+    \ $plan_exit_code in\n    0)\n        echo \"No changes detected in plan\"\n \
+    \       echo \"PLAN_STATUS=NO_CHANGES\" >> $BUILD_ID-status.env\n        ;;\n\
+    \    1)\n        echo \"Plan failed\"\n        exit 1\n        ;;\n    2)\n  \
+    \      echo \"Plan succeeded with changes\"\n        echo \"PLAN_STATUS=HAS_CHANGES\"\
+    \ >> $BUILD_ID-status.env\n        \n        # Extract plan summary\n        echo\
+    \ \"Plan Summary:\" >> $BUILD_ID-plan-summary.txt\n        grep -E \"(Plan:|Changes\
+    \ to Outputs:)\" \"$plan_output\" >> $BUILD_ID-plan-summary.txt || true\n    \
+    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n\n          \
+    \          else\n                        echo \"Skipping plan on branch $BRANCH_NAME\"\
+    \n                    fi\n                    "
+  timeout: 1200s
+- id: apply-gitops
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - plan-gitops
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ]; then\n                        echo \"Applying plan for workspace:\
+    \ gitops\"\n                        \nset -euo pipefail  # Exit on error, undefined\
+    \ variables, pipe failures\n\n# Workspace management with exponential backoff\n\
+    setup_workspace() {\n    local workspace_name=\"gitops\"\n    local wait_time=5\n\
+    \    local max_wait_time=120\n    local max_attempts=10\n    local attempt=1\n\
+    \    \n    echo \"Setting up workspace: $workspace_name\"\n    \n    while [ $attempt\
+    \ -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts to setup\
+    \ workspace\"\n        \n        # Try to select existing workspace\n        if\
+    \ terraform workspace select \"$workspace_name\" 2>/dev/null; then\n         \
+    \   echo \"Successfully selected existing workspace: $workspace_name\"\n     \
+    \       return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"gitops\"\nplan_file=\"/workspace/$BUILD_ID/tfplan_gitops\"\
+    \n\necho \"Applying Terraform plan for workspace: $workspace_name\"\n\n# Verify\
+    \ plan file exists\nif [ ! -f \"$plan_file\" ]; then\n    echo \"Error: Plan file\
+    \ not found: $plan_file\"\n    exit 1\nfi\n\n# Create backup of current state\n\
+    echo \"Creating state backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate\"\
+    \n\n# Apply with monitoring\necho \"Starting Terraform apply...\"\nstart_time=$(date\
+    \ +%s)\n\nif terraform apply \\\n    -parallelism=30 \\\n    -auto-approve \\\n\
+    \    -input=false \\\n    \"$plan_file\"; then\n    \n    end_time=$(date +%s)\n\
+    \    duration=$((end_time - start_time))\n    echo \"Apply completed successfully\
+    \ in $duration seconds\"\n    echo \"APPLY_STATUS=SUCCESS\" >> $BUILD_ID-status.env\n\
+    \    echo \"APPLY_DURATION=$duration\" >> $BUILD_ID-status.env\n    \n    # Verify\
+    \ deployment\n    echo \"Verifying deployment...\"\n    terraform output -json\
+    \ > \"/tmp/terraform_outputs_${workspace_name}_${BUILD_ID}.json\"\n    \nelse\n\
+    \    echo \"Apply failed for workspace: $workspace_name\"\n    echo \"APPLY_STATUS=FAILED\"\
+    \ >> $BUILD_ID-status.env\n    \n    # Restore from backup if needed (optional)\n\
+    \    echo \"Consider restoring from backup if needed:\"\n    echo \"  terraform\
+    \ state push /tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate\"\n \
+    \   \n    exit 1\nfi\n\n                    else\n                        echo\
+    \ \"Skipping apply on branch $BRANCH_NAME (only runs on main/master)\"\n     \
+    \               fi\n                    "
+  timeout: 2400s
+- id: destroy-gitops
+  name: hashicorp/terraform:1.11
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"cleanup\" ]; then\n                        echo \"Destroying resources in\
+    \ workspace: gitops\"\n                        \nset -euo pipefail  # Exit on\
+    \ error, undefined variables, pipe failures\n\n# Workspace management with exponential\
+    \ backoff\nsetup_workspace() {\n    local workspace_name=\"gitops\"\n    local\
+    \ wait_time=5\n    local max_wait_time=120\n    local max_attempts=10\n    local\
+    \ attempt=1\n    \n    echo \"Setting up workspace: $workspace_name\"\n    \n\
+    \    while [ $attempt -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts\
+    \ to setup workspace\"\n        \n        # Try to select existing workspace\n\
+    \        if terraform workspace select \"$workspace_name\" 2>/dev/null; then\n\
+    \            echo \"Successfully selected existing workspace: $workspace_name\"\
+    \n            return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"gitops\"\n\necho \"DANGER: Preparing to destroy\
+    \ resources in workspace: $workspace_name\"\n\n# Safety checks\nif [ \"$BRANCH_NAME\"\
+    \ != \"destroy-all\" ] && [ \"$BRANCH_NAME\" != \"cleanup\" ]; then\n    echo\
+    \ \"Error: Destroy operations are only allowed on 'destroy-all' or 'cleanup' branches\"\
+    \n    echo \"Current branch: $BRANCH_NAME\"\n    exit 1\nfi\n\n# Additional confirmation\
+    \ for production workspaces\nif [[ \"$workspace_name\" == *\"prod\"* ]] || [[\
+    \ \"$workspace_name\" == *\"production\"* ]]; then\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
+    \ ]; then\n        echo \"Error: Production workspace destruction requires CONFIRM_DESTROY_PROD=true\"\
+    \n        exit 1\n    fi\nfi\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
+    \ backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\
+    \n\n# Show what will be destroyed\necho \"Resources to be destroyed:\"\nterraform\
+    \ plan -destroy \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\"\n\n# Execute destroy\necho \"Starting\
+    \ destruction process...\"\nstart_time=$(date +%s)\n\nif terraform destroy \\\n\
+    \    -auto-approve \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\"; then\n    \n    end_time=$(date +%s)\n\
+    \    duration=$((end_time - start_time))\n    echo \"Destroy completed successfully\
+    \ in $duration seconds\"\n    echo \"DESTROY_STATUS=SUCCESS\" >> $BUILD_ID-status.env\n\
+    \    \nelse\n    echo \"Destroy failed for workspace: $workspace_name\"\n    echo\
+    \ \"DESTROY_STATUS=FAILED\" >> $BUILD_ID-status.env\n    echo \"Backup available\
+    \ at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\n    exit\
+    \ 1\nfi\n\n                    else\n                        echo \"Destroy not\
+    \ allowed on branch $BRANCH_NAME\"\n                    fi\n                 \
+    \   "
+  timeout: 1800s
+- id: setup-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    echo \"Setting up workspace: dev\"\n                  \
+    \  \n                    # Branch protection\n                    if [ \"$BRANCH_NAME\"\
+    \ = \"main\" ] || [ \"$BRANCH_NAME\" = \"master\" ] || [ -n \"${_PR_NUMBER:-}\"\
+    \ ]; then\n                        \nset -euo pipefail  # Exit on error, undefined\
+    \ variables, pipe failures\n\n# Workspace management with exponential backoff\n\
+    setup_workspace() {\n    local workspace_name=\"dev\"\n    local wait_time=5\n\
+    \    local max_wait_time=120\n    local max_attempts=10\n    local attempt=1\n\
+    \    \n    echo \"Setting up workspace: $workspace_name\"\n    \n    while [ $attempt\
+    \ -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts to setup\
+    \ workspace\"\n        \n        # Try to select existing workspace\n        if\
+    \ terraform workspace select \"$workspace_name\" 2>/dev/null; then\n         \
+    \   echo \"Successfully selected existing workspace: $workspace_name\"\n     \
+    \       return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\necho \"Running Terraform validation...\"\n\n# Check Terraform\
+    \ configuration syntax\necho \"Checking configuration syntax...\"\nterraform validate\n\
+    \n# Check for formatting issues\necho \"Checking formatting...\"\nif ! terraform\
+    \ fmt -check -recursive; then\n    echo \"Warning: Terraform files are not properly\
+    \ formatted\"\n    echo \"Run 'terraform fmt -recursive' to fix formatting issues\"\
+    \nfi\n\n# Security scan (if tfsec is available)\nif command -v tfsec &> /dev/null;\
+    \ then\n    echo \"Running security scan...\"\n    tfsec . --soft-fail\nfi\n\n\
+    echo \"Validation completed successfully\"\n\n                    else\n     \
+    \                   echo \"Skipping setup on branch $BRANCH_NAME\"\n         \
+    \               exit 0\n                    fi\n                    "
+  timeout: 600s
+- id: plan-dev
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - setup-dev
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ] || [ -n \"${_PR_NUMBER:-}\" ]; then\n                       \
+    \ echo \"Creating plan for workspace: dev\"\n                        \nset -euo\
+    \ pipefail  # Exit on error, undefined variables, pipe failures\n\n# Workspace\
+    \ management with exponential backoff\nsetup_workspace() {\n    local workspace_name=\"\
+    dev\"\n    local wait_time=5\n    local max_wait_time=120\n    local max_attempts=10\n\
+    \    local attempt=1\n    \n    echo \"Setting up workspace: $workspace_name\"\
+    \n    \n    while [ $attempt -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts\
+    \ to setup workspace\"\n        \n        # Try to select existing workspace\n\
+    \        if terraform workspace select \"$workspace_name\" 2>/dev/null; then\n\
+    \            echo \"Successfully selected existing workspace: $workspace_name\"\
+    \n            return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"dev\"\nplan_file=\"/workspace/$BUILD_ID/tfplan_dev\"\
+    \nplan_output=\"/tmp/plan_output_${workspace_name}.txt\"\n\necho \"Creating Terraform\
+    \ plan for workspace: $workspace_name\"\n\n# Create plan directory\nmkdir -p \"\
+    $(dirname \"$plan_file\")\"\n\n# Generate plan with detailed output\nterraform\
+    \ plan \\\n    -detailed-exitcode \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\" \\\n    -out=\"$plan_file\" \\\n   \
+    \ | tee \"$plan_output\"\n\n# Check plan exit code\nplan_exit_code=$?\n\ncase\
+    \ $plan_exit_code in\n    0)\n        echo \"No changes detected in plan\"\n \
+    \       echo \"PLAN_STATUS=NO_CHANGES\" >> $BUILD_ID-status.env\n        ;;\n\
+    \    1)\n        echo \"Plan failed\"\n        exit 1\n        ;;\n    2)\n  \
+    \      echo \"Plan succeeded with changes\"\n        echo \"PLAN_STATUS=HAS_CHANGES\"\
+    \ >> $BUILD_ID-status.env\n        \n        # Extract plan summary\n        echo\
+    \ \"Plan Summary:\" >> $BUILD_ID-plan-summary.txt\n        grep -E \"(Plan:|Changes\
+    \ to Outputs:)\" \"$plan_output\" >> $BUILD_ID-plan-summary.txt || true\n    \
+    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n\n          \
+    \          else\n                        echo \"Skipping plan on branch $BRANCH_NAME\"\
+    \n                    fi\n                    "
+  timeout: 1200s
+- id: apply-dev
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - plan-dev
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ]; then\n                        echo \"Applying plan for workspace:\
+    \ dev\"\n                        \nset -euo pipefail  # Exit on error, undefined\
+    \ variables, pipe failures\n\n# Workspace management with exponential backoff\n\
+    setup_workspace() {\n    local workspace_name=\"dev\"\n    local wait_time=5\n\
+    \    local max_wait_time=120\n    local max_attempts=10\n    local attempt=1\n\
+    \    \n    echo \"Setting up workspace: $workspace_name\"\n    \n    while [ $attempt\
+    \ -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts to setup\
+    \ workspace\"\n        \n        # Try to select existing workspace\n        if\
+    \ terraform workspace select \"$workspace_name\" 2>/dev/null; then\n         \
+    \   echo \"Successfully selected existing workspace: $workspace_name\"\n     \
+    \       return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"dev\"\nplan_file=\"/workspace/$BUILD_ID/tfplan_dev\"\
+    \n\necho \"Applying Terraform plan for workspace: $workspace_name\"\n\n# Verify\
+    \ plan file exists\nif [ ! -f \"$plan_file\" ]; then\n    echo \"Error: Plan file\
+    \ not found: $plan_file\"\n    exit 1\nfi\n\n# Create backup of current state\n\
+    echo \"Creating state backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate\"\
+    \n\n# Apply with monitoring\necho \"Starting Terraform apply...\"\nstart_time=$(date\
+    \ +%s)\n\nif terraform apply \\\n    -parallelism=30 \\\n    -auto-approve \\\n\
+    \    -input=false \\\n    \"$plan_file\"; then\n    \n    end_time=$(date +%s)\n\
+    \    duration=$((end_time - start_time))\n    echo \"Apply completed successfully\
+    \ in $duration seconds\"\n    echo \"APPLY_STATUS=SUCCESS\" >> $BUILD_ID-status.env\n\
+    \    echo \"APPLY_DURATION=$duration\" >> $BUILD_ID-status.env\n    \n    # Verify\
+    \ deployment\n    echo \"Verifying deployment...\"\n    terraform output -json\
+    \ > \"/tmp/terraform_outputs_${workspace_name}_${BUILD_ID}.json\"\n    \nelse\n\
+    \    echo \"Apply failed for workspace: $workspace_name\"\n    echo \"APPLY_STATUS=FAILED\"\
+    \ >> $BUILD_ID-status.env\n    \n    # Restore from backup if needed (optional)\n\
+    \    echo \"Consider restoring from backup if needed:\"\n    echo \"  terraform\
+    \ state push /tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate\"\n \
+    \   \n    exit 1\nfi\n\n                    else\n                        echo\
+    \ \"Skipping apply on branch $BRANCH_NAME (only runs on main/master)\"\n     \
+    \               fi\n                    "
+  timeout: 2400s
+- id: destroy-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"cleanup\" ]; then\n                        echo \"Destroying resources in\
+    \ workspace: dev\"\n                        \nset -euo pipefail  # Exit on error,\
+    \ undefined variables, pipe failures\n\n# Workspace management with exponential\
+    \ backoff\nsetup_workspace() {\n    local workspace_name=\"dev\"\n    local wait_time=5\n\
+    \    local max_wait_time=120\n    local max_attempts=10\n    local attempt=1\n\
+    \    \n    echo \"Setting up workspace: $workspace_name\"\n    \n    while [ $attempt\
+    \ -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts to setup\
+    \ workspace\"\n        \n        # Try to select existing workspace\n        if\
+    \ terraform workspace select \"$workspace_name\" 2>/dev/null; then\n         \
+    \   echo \"Successfully selected existing workspace: $workspace_name\"\n     \
+    \       return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"dev\"\n\necho \"DANGER: Preparing to destroy\
+    \ resources in workspace: $workspace_name\"\n\n# Safety checks\nif [ \"$BRANCH_NAME\"\
+    \ != \"destroy-all\" ] && [ \"$BRANCH_NAME\" != \"cleanup\" ]; then\n    echo\
+    \ \"Error: Destroy operations are only allowed on 'destroy-all' or 'cleanup' branches\"\
+    \n    echo \"Current branch: $BRANCH_NAME\"\n    exit 1\nfi\n\n# Additional confirmation\
+    \ for production workspaces\nif [[ \"$workspace_name\" == *\"prod\"* ]] || [[\
+    \ \"$workspace_name\" == *\"production\"* ]]; then\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
+    \ ]; then\n        echo \"Error: Production workspace destruction requires CONFIRM_DESTROY_PROD=true\"\
+    \n        exit 1\n    fi\nfi\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
+    \ backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\
+    \n\n# Show what will be destroyed\necho \"Resources to be destroyed:\"\nterraform\
+    \ plan -destroy \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\"\n\n# Execute destroy\necho \"Starting\
+    \ destruction process...\"\nstart_time=$(date +%s)\n\nif terraform destroy \\\n\
+    \    -auto-approve \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\"; then\n    \n    end_time=$(date +%s)\n\
+    \    duration=$((end_time - start_time))\n    echo \"Destroy completed successfully\
+    \ in $duration seconds\"\n    echo \"DESTROY_STATUS=SUCCESS\" >> $BUILD_ID-status.env\n\
+    \    \nelse\n    echo \"Destroy failed for workspace: $workspace_name\"\n    echo\
+    \ \"DESTROY_STATUS=FAILED\" >> $BUILD_ID-status.env\n    echo \"Backup available\
+    \ at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\n    exit\
+    \ 1\nfi\n\n                    else\n                        echo \"Destroy not\
+    \ allowed on branch $BRANCH_NAME\"\n                    fi\n                 \
+    \   "
+  timeout: 1800s
+- id: setup-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    echo \"Setting up workspace: staging\"\n              \
+    \      \n                    # Branch protection\n                    if [ \"\
+    $BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\" = \"master\" ] || [ -n \"${_PR_NUMBER:-}\"\
+    \ ]; then\n                        \nset -euo pipefail  # Exit on error, undefined\
+    \ variables, pipe failures\n\n# Workspace management with exponential backoff\n\
+    setup_workspace() {\n    local workspace_name=\"staging\"\n    local wait_time=5\n\
+    \    local max_wait_time=120\n    local max_attempts=10\n    local attempt=1\n\
+    \    \n    echo \"Setting up workspace: $workspace_name\"\n    \n    while [ $attempt\
+    \ -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts to setup\
+    \ workspace\"\n        \n        # Try to select existing workspace\n        if\
+    \ terraform workspace select \"$workspace_name\" 2>/dev/null; then\n         \
+    \   echo \"Successfully selected existing workspace: $workspace_name\"\n     \
+    \       return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\necho \"Running Terraform validation...\"\n\n# Check Terraform\
+    \ configuration syntax\necho \"Checking configuration syntax...\"\nterraform validate\n\
+    \n# Check for formatting issues\necho \"Checking formatting...\"\nif ! terraform\
+    \ fmt -check -recursive; then\n    echo \"Warning: Terraform files are not properly\
+    \ formatted\"\n    echo \"Run 'terraform fmt -recursive' to fix formatting issues\"\
+    \nfi\n\n# Security scan (if tfsec is available)\nif command -v tfsec &> /dev/null;\
+    \ then\n    echo \"Running security scan...\"\n    tfsec . --soft-fail\nfi\n\n\
+    echo \"Validation completed successfully\"\n\n                    else\n     \
+    \                   echo \"Skipping setup on branch $BRANCH_NAME\"\n         \
+    \               exit 0\n                    fi\n                    "
+  timeout: 600s
+- id: plan-staging
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - setup-staging
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ] || [ -n \"${_PR_NUMBER:-}\" ]; then\n                       \
+    \ echo \"Creating plan for workspace: staging\"\n                        \nset\
+    \ -euo pipefail  # Exit on error, undefined variables, pipe failures\n\n# Workspace\
+    \ management with exponential backoff\nsetup_workspace() {\n    local workspace_name=\"\
+    staging\"\n    local wait_time=5\n    local max_wait_time=120\n    local max_attempts=10\n\
+    \    local attempt=1\n    \n    echo \"Setting up workspace: $workspace_name\"\
+    \n    \n    while [ $attempt -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts\
+    \ to setup workspace\"\n        \n        # Try to select existing workspace\n\
+    \        if terraform workspace select \"$workspace_name\" 2>/dev/null; then\n\
+    \            echo \"Successfully selected existing workspace: $workspace_name\"\
+    \n            return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"staging\"\nplan_file=\"/workspace/$BUILD_ID/tfplan_staging\"\
+    \nplan_output=\"/tmp/plan_output_${workspace_name}.txt\"\n\necho \"Creating Terraform\
+    \ plan for workspace: $workspace_name\"\n\n# Create plan directory\nmkdir -p \"\
+    $(dirname \"$plan_file\")\"\n\n# Generate plan with detailed output\nterraform\
+    \ plan \\\n    -detailed-exitcode \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\" \\\n    -out=\"$plan_file\" \\\n   \
+    \ | tee \"$plan_output\"\n\n# Check plan exit code\nplan_exit_code=$?\n\ncase\
+    \ $plan_exit_code in\n    0)\n        echo \"No changes detected in plan\"\n \
+    \       echo \"PLAN_STATUS=NO_CHANGES\" >> $BUILD_ID-status.env\n        ;;\n\
+    \    1)\n        echo \"Plan failed\"\n        exit 1\n        ;;\n    2)\n  \
+    \      echo \"Plan succeeded with changes\"\n        echo \"PLAN_STATUS=HAS_CHANGES\"\
+    \ >> $BUILD_ID-status.env\n        \n        # Extract plan summary\n        echo\
+    \ \"Plan Summary:\" >> $BUILD_ID-plan-summary.txt\n        grep -E \"(Plan:|Changes\
+    \ to Outputs:)\" \"$plan_output\" >> $BUILD_ID-plan-summary.txt || true\n    \
+    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n\n          \
+    \          else\n                        echo \"Skipping plan on branch $BRANCH_NAME\"\
+    \n                    fi\n                    "
+  timeout: 1200s
+- id: apply-staging
+  name: hashicorp/terraform:1.11
+  waitFor:
+  - plan-staging
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"master\" ]; then\n                        echo \"Applying plan for workspace:\
+    \ staging\"\n                        \nset -euo pipefail  # Exit on error, undefined\
+    \ variables, pipe failures\n\n# Workspace management with exponential backoff\n\
+    setup_workspace() {\n    local workspace_name=\"staging\"\n    local wait_time=5\n\
+    \    local max_wait_time=120\n    local max_attempts=10\n    local attempt=1\n\
+    \    \n    echo \"Setting up workspace: $workspace_name\"\n    \n    while [ $attempt\
+    \ -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts to setup\
+    \ workspace\"\n        \n        # Try to select existing workspace\n        if\
+    \ terraform workspace select \"$workspace_name\" 2>/dev/null; then\n         \
+    \   echo \"Successfully selected existing workspace: $workspace_name\"\n     \
+    \       return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"staging\"\nplan_file=\"/workspace/$BUILD_ID/tfplan_staging\"\
+    \n\necho \"Applying Terraform plan for workspace: $workspace_name\"\n\n# Verify\
+    \ plan file exists\nif [ ! -f \"$plan_file\" ]; then\n    echo \"Error: Plan file\
+    \ not found: $plan_file\"\n    exit 1\nfi\n\n# Create backup of current state\n\
+    echo \"Creating state backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate\"\
+    \n\n# Apply with monitoring\necho \"Starting Terraform apply...\"\nstart_time=$(date\
+    \ +%s)\n\nif terraform apply \\\n    -parallelism=30 \\\n    -auto-approve \\\n\
+    \    -input=false \\\n    \"$plan_file\"; then\n    \n    end_time=$(date +%s)\n\
+    \    duration=$((end_time - start_time))\n    echo \"Apply completed successfully\
+    \ in $duration seconds\"\n    echo \"APPLY_STATUS=SUCCESS\" >> $BUILD_ID-status.env\n\
+    \    echo \"APPLY_DURATION=$duration\" >> $BUILD_ID-status.env\n    \n    # Verify\
+    \ deployment\n    echo \"Verifying deployment...\"\n    terraform output -json\
+    \ > \"/tmp/terraform_outputs_${workspace_name}_${BUILD_ID}.json\"\n    \nelse\n\
+    \    echo \"Apply failed for workspace: $workspace_name\"\n    echo \"APPLY_STATUS=FAILED\"\
+    \ >> $BUILD_ID-status.env\n    \n    # Restore from backup if needed (optional)\n\
+    \    echo \"Consider restoring from backup if needed:\"\n    echo \"  terraform\
+    \ state push /tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate\"\n \
+    \   \n    exit 1\nfi\n\n                    else\n                        echo\
+    \ \"Skipping apply on branch $BRANCH_NAME (only runs on main/master)\"\n     \
+    \               fi\n                    "
+  timeout: 2400s
+- id: destroy-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ] || [ \"$BRANCH_NAME\"\
+    \ = \"cleanup\" ]; then\n                        echo \"Destroying resources in\
+    \ workspace: staging\"\n                        \nset -euo pipefail  # Exit on\
+    \ error, undefined variables, pipe failures\n\n# Workspace management with exponential\
+    \ backoff\nsetup_workspace() {\n    local workspace_name=\"staging\"\n    local\
+    \ wait_time=5\n    local max_wait_time=120\n    local max_attempts=10\n    local\
+    \ attempt=1\n    \n    echo \"Setting up workspace: $workspace_name\"\n    \n\
+    \    while [ $attempt -le $max_attempts ]; do\n        echo \"Attempt $attempt/$max_attempts\
+    \ to setup workspace\"\n        \n        # Try to select existing workspace\n\
+    \        if terraform workspace select \"$workspace_name\" 2>/dev/null; then\n\
+    \            echo \"Successfully selected existing workspace: $workspace_name\"\
+    \n            return 0\n        fi\n        \n        # Try to create new workspace\n\
+    \        if terraform workspace new \"$workspace_name\" 2>/dev/null; then\n  \
+    \          echo \"Successfully created new workspace: $workspace_name\"\n    \
+    \        return 0\n        fi\n        \n        echo \"Workspace setup failed.\
+    \ Waiting $wait_time seconds before retry...\"\n        sleep $wait_time\n   \
+    \     \n        # Exponential backoff with jitter\n        wait_time=$((wait_time\
+    \ * 2))\n        if [ $wait_time -gt $max_wait_time ]; then\n            wait_time=$max_wait_time\n\
+    \        fi\n        \n        attempt=$((attempt + 1))\n    done\n    \n    echo\
+    \ \"Failed to setup workspace after $max_attempts attempts\"\n    exit 1\n}\n\n\
+    # Initialize Terraform with retry logic\ninit_terraform() {\n    local max_attempts=3\n\
+    \    local attempt=1\n    \n    while [ $attempt -le $max_attempts ]; do\n   \
+    \     echo \"Initializing Terraform (attempt $attempt/$max_attempts)\"\n     \
+    \   \n        if terraform init -reconfigure -input=false; then\n            echo\
+    \ \"Terraform initialization successful\"\n            return 0\n        fi\n\
+    \        \n        echo \"Terraform init failed. Attempt $attempt/$max_attempts\"\
+    \n        attempt=$((attempt + 1))\n        \n        if [ $attempt -le $max_attempts\
+    \ ]; then\n            sleep 10\n        fi\n    done\n    \n    echo \"Terraform\
+    \ initialization failed after $max_attempts attempts\"\n    exit 1\n}\n\n# Main\
+    \ execution\ninit_terraform\nsetup_workspace\n\n                        \nset\
+    \ -euo pipefail\n\nworkspace_name=\"staging\"\n\necho \"DANGER: Preparing to destroy\
+    \ resources in workspace: $workspace_name\"\n\n# Safety checks\nif [ \"$BRANCH_NAME\"\
+    \ != \"destroy-all\" ] && [ \"$BRANCH_NAME\" != \"cleanup\" ]; then\n    echo\
+    \ \"Error: Destroy operations are only allowed on 'destroy-all' or 'cleanup' branches\"\
+    \n    echo \"Current branch: $BRANCH_NAME\"\n    exit 1\nfi\n\n# Additional confirmation\
+    \ for production workspaces\nif [[ \"$workspace_name\" == *\"prod\"* ]] || [[\
+    \ \"$workspace_name\" == *\"production\"* ]]; then\n    if [ -z \"${CONFIRM_DESTROY_PROD:-}\"\
+    \ ]; then\n        echo \"Error: Production workspace destruction requires CONFIRM_DESTROY_PROD=true\"\
+    \n        exit 1\n    fi\nfi\n\n# Create pre-destroy backup\necho \"Creating pre-destroy\
+    \ backup...\"\nterraform state pull > \"/tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\
+    \n\n# Show what will be destroyed\necho \"Resources to be destroyed:\"\nterraform\
+    \ plan -destroy \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\"\n\n# Execute destroy\necho \"Starting\
+    \ destruction process...\"\nstart_time=$(date +%s)\n\nif terraform destroy \\\n\
+    \    -auto-approve \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
+    \ \\\n    -var=\"project_id=$PROJECT_ID\"; then\n    \n    end_time=$(date +%s)\n\
+    \    duration=$((end_time - start_time))\n    echo \"Destroy completed successfully\
+    \ in $duration seconds\"\n    echo \"DESTROY_STATUS=SUCCESS\" >> $BUILD_ID-status.env\n\
+    \    \nelse\n    echo \"Destroy failed for workspace: $workspace_name\"\n    echo\
+    \ \"DESTROY_STATUS=FAILED\" >> $BUILD_ID-status.env\n    echo \"Backup available\
+    \ at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate\"\n    exit\
+    \ 1\nfi\n\n                    else\n                        echo \"Destroy not\
+    \ allowed on branch $BRANCH_NAME\"\n                    fi\n                 \
+    \   "
+  timeout: 1800s
+- name: ubuntu:22.04
+  id: build-summary
+  waitFor:
+  - apply-gitops
+  - apply-dev
+  - apply-staging
+  entrypoint: bash
+  args:
+  - -c
+  - "\n                echo \"=== Build Summary ===\"\n                if [ -f \"\
+    $BUILD_ID-status.env\" ]; then\n                    cat $BUILD_ID-status.env\n\
+    \                fi\n                \n                echo \"BUILD_END=$(date\
+    \ -Iseconds)\" >> $BUILD_ID-status.env\n                echo \"Build completed\
+    \ at $(date)\"\n                echo \"====================\"\n              \
+    \  "
+  timeout: 60s
+timeout: 3600s
 options:
-  dynamicSubstitutions: true
-  automapSubstitutions: true
+  substitutionOption: ALLOW_LOOSE
+  logging: CLOUD_LOGGING_ONLY
+  logStreamingOption: STREAM_ON
+  machineType: E2_HIGHCPU_8
 substitutions:
-  _TF_VERSION: '1.11'
-  _WORKSPACES: 'gitops,dev'
   _PR_NUMBER: ''
-# --dict-flag=^:^a=b,c:d=f,g # => {'a': 'b,c', 'd': 'f,g'}
+  _WORKSPACE: default
+  _TERRAFORM_VERSION: '1.11'
+availableSecrets:
+  secretManager:
+  - versionName: projects/$PROJECT_ID/secrets/terraform-service-account/versions/latest
+    env: GOOGLE_CREDENTIALS
+artifacts:
+  objects:
+    location: gs://$PROJECT_ID-terraform-state/build-artifacts
+    paths:
+    - $BUILD_ID-status.env
+    - $BUILD_ID-plan-summary.txt
+    - /tmp/terraform_*_$BUILD_ID.*
