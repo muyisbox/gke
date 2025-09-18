@@ -1,9 +1,15 @@
 locals {
   cluster_types = toset(["gitops", "dev", "staging"])
   subnet_cidrs = {
-    gitops  = "10.128.0.0/17"
-    dev     = "10.160.0.0/17"
-    staging = "10.192.0.0/17"
+    gitops  = "10.0.0.0/17"
+    dev     = "10.1.0.0/17"
+    staging = "10.2.0.0/17"
+  }
+  # Master CIDR offsets for different environments
+  master_cidr_offsets = {
+    dev     = "0"
+    staging = "1"
+    gitops  = "2"
   }
   apps = {
     prometheus = {

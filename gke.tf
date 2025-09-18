@@ -4,12 +4,14 @@ module "gke" {
   name                       = "${terraform.workspace}-cluster"
   region                     = var.region
   zones                      = var.zones
-  network                    = "${var.network}-${terraform.workspace}"
-  subnetwork                 = "${var.subnetwork}-${terraform.workspace}"
+  network                    = module.shared-network.network_name
+  subnetwork                 = "gke-subnet-${terraform.workspace}"
   enable_private_nodes       = true
+  enable_private_endpoint    = false
+  master_ipv4_cidr_block     = "172.19.${local.master_cidr_offsets[terraform.workspace]}.0/28"
   deletion_protection        = false
-  ip_range_pods              = "ip-range-pods"
-  ip_range_services          = "ip-range-svc"
+  ip_range_pods              = "${terraform.workspace}-pods"
+  ip_range_services          = "${terraform.workspace}-services"
   http_load_balancing        = false
   network_policy             = false
   horizontal_pod_autoscaling = true
@@ -64,6 +66,8 @@ module "gke" {
     all = [
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/compute",
     ]
   }
 
@@ -103,5 +107,5 @@ module "gke" {
     ]
   }
 
-  depends_on = [module.gcp-network]
+  depends_on = [module.shared-network]
 }
