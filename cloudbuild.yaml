@@ -847,7 +847,7 @@ availableSecrets:
     env: GOOGLE_CREDENTIALS
 artifacts:
   objects:
-    location: gs://$PROJECT_ID-terraform-state/build-artifacts
+    location: gs://$PROJECT_ID-terraform/build-artifacts
     paths:
     - $BUILD_ID-status.env
     - $BUILD_ID-plan-summary.txt
