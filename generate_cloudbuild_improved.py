@@ -355,6 +355,7 @@ fi
                 'id': f'setup-{workspace_safe}',
                 'name': f'hashicorp/terraform:{self.tf_version}',
                 'entrypoint': 'bash',
+                'secretEnv': ['GOOGLE_CREDENTIALS'],
                 'args': [
                     '-c',
                     f'''
@@ -372,13 +373,13 @@ fi
                 ],
                 'timeout': '600s'
             })
-            
             # Plan step
             steps.append({
                 'id': f'plan-{workspace_safe}',
                 'name': f'hashicorp/terraform:{self.tf_version}',
                 'waitFor': [f'setup-{workspace_safe}'],
                 'entrypoint': 'bash',
+                'secretEnv': ['GOOGLE_CREDENTIALS'],
                 'args': [
                     '-c',
                     f'''
@@ -400,6 +401,7 @@ fi
                 'name': f'hashicorp/terraform:{self.tf_version}',
                 'waitFor': [f'plan-{workspace_safe}'],
                 'entrypoint': 'bash',
+                'secretEnv': ['GOOGLE_CREDENTIALS'],
                 'args': [
                     '-c',
                     f'''
@@ -420,6 +422,7 @@ fi
                 'id': f'destroy-{workspace_safe}',
                 'name': f'hashicorp/terraform:{self.tf_version}',
                 'entrypoint': 'bash',
+                'secretEnv': ['GOOGLE_CREDENTIALS'],
                 'args': [
                     '-c',
                     f'''

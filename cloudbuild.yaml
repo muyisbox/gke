@@ -19,6 +19,8 @@ steps:
 - id: setup-gitops
   name: hashicorp/terraform:1.11
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    echo \"Setting up workspace: gitops\"\n               \
@@ -68,6 +70,8 @@ steps:
   waitFor:
   - setup-gitops
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
@@ -123,6 +127,8 @@ steps:
   waitFor:
   - plan-gitops
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
@@ -179,6 +185,8 @@ steps:
 - id: destroy-gitops
   name: hashicorp/terraform:1.11
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ] || [ \"$BRANCH_NAME\"\
@@ -239,6 +247,8 @@ steps:
 - id: setup-dev
   name: hashicorp/terraform:1.11
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    echo \"Setting up workspace: dev\"\n                  \
@@ -288,6 +298,8 @@ steps:
   waitFor:
   - setup-dev
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
@@ -343,6 +355,8 @@ steps:
   waitFor:
   - plan-dev
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
@@ -399,6 +413,8 @@ steps:
 - id: destroy-dev
   name: hashicorp/terraform:1.11
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ] || [ \"$BRANCH_NAME\"\
@@ -459,6 +475,8 @@ steps:
 - id: setup-staging
   name: hashicorp/terraform:1.11
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    echo \"Setting up workspace: staging\"\n              \
@@ -508,6 +526,8 @@ steps:
   waitFor:
   - setup-staging
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
@@ -563,6 +583,8 @@ steps:
   waitFor:
   - plan-staging
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
@@ -619,6 +641,8 @@ steps:
 - id: destroy-staging
   name: hashicorp/terraform:1.11
   entrypoint: bash
+  secretEnv:
+  - GOOGLE_CREDENTIALS
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"destroy-all\" ] || [ \"$BRANCH_NAME\"\
