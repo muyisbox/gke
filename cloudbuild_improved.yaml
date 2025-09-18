@@ -1,0 +1,294 @@
+# Enhanced Cloud Build Configuration for Terraform CI/CD
+# Improved with better error handling, security, and monitoring
+
+steps:
+  # Step 1: Environment validation and setup
+  - name: 'python:3.12-slim'
+    id: 'validate-and-generate'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+
+        echo "=== Cloud Build Environment Validation ==="
+        echo "Build ID: $BUILD_ID"
+        echo "Branch Name: $BRANCH_NAME"
+        echo "Pull Request: ${_PR_NUMBER:-'N/A'}"
+        echo "Project ID: $PROJECT_ID"
+        echo "Repository: ${REPO_FULL_NAME:-'N/A'}"
+        echo "Workspaces: ${_WORKSPACES}"
+        echo "Terraform Version: ${_TF_VERSION}"
+        echo "============================================"
+
+        # Install required dependencies
+        echo "Installing dependencies..."
+        apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+          yq \
+          yamllint \
+          curl \
+          git \
+          jq
+
+        pip install --user --quiet \
+          pyyaml \
+          google-cloud-storage \
+          google-cloud-secret-manager
+
+        # Validate environment variables
+        if [ -z "${_WORKSPACES:-}" ]; then
+          echo "Error: _WORKSPACES substitution variable is required"
+          exit 1
+        fi
+
+        if [ -z "${_TF_VERSION:-}" ]; then
+          echo "Error: _TF_VERSION substitution variable is required"
+          exit 1
+        fi
+
+        # Generate Cloud Build configuration
+        echo "Generating Cloud Build configuration..."
+        python3 /workspace/generate_cloudbuild_improved.py
+
+        # Validate generated YAML
+        echo "Validating generated YAML..."
+        yamllint -d relaxed /workspace/cloudbuild_generated.yaml
+        yq eval '.' /workspace/cloudbuild_generated.yaml > /dev/null
+
+        echo "Configuration generated and validated successfully"
+
+        # Display generated config summary
+        echo "=== Generated Configuration Summary ==="
+        echo "Total steps: $(yq eval '.steps | length' /workspace/cloudbuild_generated.yaml)"
+        echo "Timeout: $(yq eval '.timeout' /workspace/cloudbuild_generated.yaml)"
+        echo "Machine type: $(yq eval '.options.machineType' /workspace/cloudbuild_generated.yaml)"
+        echo "======================================"
+
+    env:
+      - 'WORKSPACES=${_WORKSPACES}'
+      - 'TF_VERSION=${_TF_VERSION}'
+    timeout: '300s'
+
+  # Step 2: Security and compliance checks
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:alpine'
+    id: 'security-validation'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+
+        echo "=== Security and Compliance Validation ==="
+
+        # Check for required IAM permissions
+        echo "Validating Cloud Build service account permissions..."
+
+        # Check if we can access the project
+        if ! gcloud projects describe $PROJECT_ID --quiet; then
+          echo "Error: Cannot access project $PROJECT_ID"
+          exit 1
+        fi
+
+        # Validate Secret Manager access (if using secrets)
+        if gcloud secrets list --project=$PROJECT_ID --filter="name:terraform-service-account" --quiet; then
+          echo "Secret Manager access validated"
+        else
+          echo "Warning: terraform-service-account secret not found or not accessible"
+        fi
+
+        # Check Cloud Storage bucket for Terraform state
+        if gsutil ls gs://$PROJECT_ID-terraform-state/ &>/dev/null; then
+          echo "Terraform state bucket access validated"
+        else
+          echo "Warning: Terraform state bucket not accessible"
+        fi
+
+        echo "Security validation completed"
+
+    timeout: '180s'
+
+  # Step 3: Submit the generated Cloud Build
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:alpine'
+    id: 'submit-terraform-build'
+    waitFor: ['validate-and-generate', 'security-validation']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+
+        echo "=== Submitting Terraform Cloud Build ==="
+
+        # Validate required files exist
+        if [ ! -f "/workspace/cloudbuild_generated.yaml" ]; then
+          echo "Error: Generated Cloud Build configuration not found"
+          exit 1
+        fi
+
+        # Prepare substitutions
+        SUBSTITUTIONS="BRANCH_NAME=$BRANCH_NAME"
+
+        if [ -n "${_PR_NUMBER:-}" ]; then
+          SUBSTITUTIONS="$SUBSTITUTIONS,_PR_NUMBER=${_PR_NUMBER}"
+        fi
+
+        # Add environment-specific substitutions
+        SUBSTITUTIONS="$SUBSTITUTIONS,PROJECT_ID=$PROJECT_ID"
+        SUBSTITUTIONS="$SUBSTITUTIONS,LOCATION=${LOCATION:-us-central1}"
+        SUBSTITUTIONS="$SUBSTITUTIONS,BUILD_ID=$BUILD_ID"
+
+        echo "Submitting build with substitutions: $SUBSTITUTIONS"
+
+        # Submit the build
+        gcloud builds submit \
+          https://github.com/$REPO_FULL_NAME \
+          --config=/workspace/cloudbuild_generated.yaml \
+          --region=${LOCATION:-us-central1} \
+          --git-source-revision=$BRANCH_NAME \
+          --substitutions="$SUBSTITUTIONS" \
+          --async \
+          --format="value(id)" > /workspace/terraform_build_id.txt
+
+        TERRAFORM_BUILD_ID=$(cat /workspace/terraform_build_id.txt)
+        echo "Terraform build submitted with ID: $TERRAFORM_BUILD_ID"
+
+        # Store build information for monitoring
+        cat > /workspace/build_info.json << EOF
+        {
+          "terraform_build_id": "$TERRAFORM_BUILD_ID",
+          "parent_build_id": "$BUILD_ID",
+          "branch_name": "$BRANCH_NAME",
+          "repository": "$REPO_FULL_NAME",
+          "workspaces": "${_WORKSPACES}",
+          "timestamp": "$(date -Iseconds)",
+          "region": "${LOCATION:-us-central1}"
+        }
+        EOF
+
+        echo "Build information stored in build_info.json"
+
+    timeout: '300s'
+
+  # Step 4: Monitor the Terraform build (optional)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:alpine'
+    id: 'monitor-build'
+    waitFor: ['submit-terraform-build']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+
+        echo "=== Monitoring Terraform Build ==="
+
+        # Check if monitoring is enabled
+        if [ "${_MONITOR_BUILD:-false}" = "false" ]; then
+          echo "Build monitoring disabled, skipping..."
+          exit 0
+        fi
+
+        if [ ! -f "/workspace/terraform_build_id.txt" ]; then
+          echo "Error: Terraform build ID not found"
+          exit 1
+        fi
+
+        TERRAFORM_BUILD_ID=$(cat /workspace/terraform_build_id.txt)
+        echo "Monitoring build: $TERRAFORM_BUILD_ID"
+
+        # Monitor build progress
+        timeout ${_MONITOR_TIMEOUT:-1800} bash -c "
+          while true; do
+            BUILD_STATUS=\$(gcloud builds describe $TERRAFORM_BUILD_ID --region=${LOCATION:-us-central1} --format='value(status)')
+            echo \"Build status: \$BUILD_STATUS\"
+
+            case \$BUILD_STATUS in
+              'SUCCESS')
+                echo 'Terraform build completed successfully'
+                exit 0
+                ;;
+              'FAILURE'|'CANCELLED'|'EXPIRED'|'TIMEOUT')
+                echo 'Terraform build failed with status: '\$BUILD_STATUS
+                # Get build logs for debugging
+                gcloud builds log $TERRAFORM_BUILD_ID --region=${LOCATION:-us-central1} || true
+                exit 1
+                ;;
+              'WORKING'|'QUEUED')
+                echo 'Build in progress, waiting...'
+                sleep 30
+                ;;
+              *)
+                echo 'Unknown build status: '\$BUILD_STATUS
+                sleep 30
+                ;;
+            esac
+          done
+        "
+
+    timeout: '2100s'  # 35 minutes max monitoring
+
+# Enhanced build options
+options:
+  # Resource optimization
+  machineType: 'E2_STANDARD_4'
+  diskSizeGb: 100
+
+  # Logging and monitoring
+  logging: CLOUD_LOGGING_ONLY
+  logStreamingOption: STREAM_ON
+
+  # Substitution settings
+  substitutionOption: ALLOW_LOOSE
+  dynamicSubstitutions: true
+  automapSubstitutions: true
+
+  # Enhanced environment
+  env:
+    - 'CLOUDSDK_CORE_DISABLE_PROMPTS=1'
+    - 'PYTHONUNBUFFERED=1'
+    - 'DEBIAN_FRONTEND=noninteractive'
+
+# Timeout for the entire build
+timeout: 3600s
+
+# Available secrets (if needed)
+availableSecrets:
+  secretManager:
+    - versionName: 'projects/$PROJECT_ID/secrets/terraform-service-account/versions/latest'
+      env: 'TERRAFORM_SERVICE_ACCOUNT_KEY'
+
+# Build artifacts
+artifacts:
+  objects:
+    location: 'gs://$PROJECT_ID-terraform-state/build-artifacts/$BUILD_ID'
+    paths:
+      - '/workspace/cloudbuild_generated.yaml'
+      - '/workspace/build_info.json'
+      - '/workspace/terraform_build_id.txt'
+
+# Substitution variables with improved defaults
+substitutions:
+  # Terraform configuration
+  _TF_VERSION: '1.11'
+  _WORKSPACES: 'gitops,dev'
+
+  # Build configuration
+  _PR_NUMBER: ''
+  _MONITOR_BUILD: 'true'
+  _MONITOR_TIMEOUT: '1800'  # 30 minutes
+
+  # Security and compliance
+  _ENABLE_SECURITY_SCAN: 'true'
+  _SKIP_VALIDATION: 'false'
+
+  # Notification settings (for future use)
+  _NOTIFY_ON_SUCCESS: 'false'
+  _NOTIFY_ON_FAILURE: 'true'
+  _SLACK_WEBHOOK: ''
+
+# Tags for better organization and monitoring
+tags:
+  - 'terraform'
+  - 'cicd'
+  - 'infrastructure'
+  - 'branch-${BRANCH_NAME}'
+  - 'workspaces-${_WORKSPACES}'
