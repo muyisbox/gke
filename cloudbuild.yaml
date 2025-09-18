@@ -355,7 +355,7 @@ steps:
 - id: setup-dev
   name: hashicorp/terraform:1.11
   waitFor:
-  - security-report
+  - apply-gitops
   entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
@@ -583,6 +583,8 @@ steps:
   timeout: 1800s
 - id: setup-staging
   name: hashicorp/terraform:1.11
+  waitFor:
+  - apply-dev
   entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
