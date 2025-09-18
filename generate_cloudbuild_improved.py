@@ -331,15 +331,15 @@ fi
                 echo "Branch Name: $BRANCH_NAME"
                 echo "Pull Request: ${{_PR_NUMBER:-'N/A'}}"
                 echo "Project ID: $PROJECT_ID"
-                echo "Region: ${LOCATION:-'N/A'}"
-                echo "Trigger Name: ${TRIGGER_NAME:-'N/A'}"
-                echo "Repository: ${REPO_FULL_NAME:-'N/A'}"
-                echo "Commit SHA: ${COMMIT_SHA:-'N/A'}"
+                echo "Region: ${{LOCATION:-'N/A'}}"
+                echo "Trigger Name: ${{TRIGGER_NAME:-'N/A'}}"
+                echo "Repository: ${{REPO_FULL_NAME:-'N/A'}}"
+                echo "Commit SHA: ${{COMMIT_SHA:-'N/A'}}"
                 echo "=================================="
                 
                 # Create status tracking file
                 echo "BUILD_START=$(date -Iseconds)" > $BUILD_ID-status.env
-                echo "WORKSPACES=${{_WORKSPACES}}" >> $BUILD_ID-status.env
+                echo "WORKSPACES=${{_WORKSPACES:-}}" >> $BUILD_ID-status.env
                 '''
             ],
             'timeout': '60s'

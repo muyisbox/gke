@@ -6,15 +6,15 @@ steps:
   - -c
   - "\n                echo \"=== Build Environment Information ===\"\n          \
     \      echo \"Build ID: $BUILD_ID\"\n                echo \"Branch Name: $BRANCH_NAME\"\
-    \n                echo \"Pull Request: ${{_PR_NUMBER:-'N/A'}}\"\n            \
-    \    echo \"Project ID: $PROJECT_ID\"\n                echo \"Region: ${LOCATION:-'N/A'}\"\
-    \n                echo \"Trigger Name: ${TRIGGER_NAME:-'N/A'}\"\n            \
-    \    echo \"Repository: ${REPO_FULL_NAME:-'N/A'}\"\n                echo \"Commit\
-    \ SHA: ${COMMIT_SHA:-'N/A'}\"\n                echo \"==================================\"\
+    \n                echo \"Pull Request: ${_PR_NUMBER:-'N/A'}\"\n            \
+    \    echo \"Project ID: $PROJECT_ID\"\n                echo \"Region: ${{LOCATION:-'N/A'}}\"\
+    \n                echo \"Trigger Name: ${{TRIGGER_NAME:-'N/A'}}\"\n          \
+    \      echo \"Repository: ${{REPO_FULL_NAME:-'N/A'}}\"\n                echo \"\
+    Commit SHA: ${{COMMIT_SHA:-'N/A'}}\"\n                echo \"==================================\"\
     \n                \n                # Create status tracking file\n          \
     \      echo \"BUILD_START=$(date -Iseconds)\" > $BUILD_ID-status.env\n       \
-    \         echo \"WORKSPACES=${{_WORKSPACES}}\" >> $BUILD_ID-status.env\n     \
-    \           "
+    \         echo \"WORKSPACES=${{_WORKSPACES:-}}\" >> $BUILD_ID-status.env\n   \
+    \             "
   timeout: 60s
 - id: setup-gitops
   name: hashicorp/terraform:1.11
