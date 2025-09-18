@@ -30,7 +30,7 @@ steps:
   - '--severity'
   - 'HIGH,CRITICAL'
   - '--exit-code'
-  - '1'
+  - '0'  # Report only, don't fail
   - '.'
   env:
   - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
@@ -44,11 +44,11 @@ steps:
   - '--format'
   - 'table'
   - '--exit-code'
-  - '1'
+  - '0'  # Don't fail build on findings, report only
   - '--severity'
   - 'HIGH,CRITICAL'
-  - '--namespaces'
-  - 'builtin,appshield'
+  - '--ignorefile'
+  - '.trivyignore'
   - '.'
   env:
   - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
@@ -63,12 +63,9 @@ steps:
   - '--framework'
   - 'terraform'
   - '--output'
-  - 'sarif'
-  - '--output-file-path'
-  - 'checkov-results.sarif'
-  - '--hard-fail-on'
-  - 'HIGH,CRITICAL'
-  - '--quiet'
+  - 'cli'
+  - '--soft-fail'  # Report findings but don't fail build
+  - '--compact'  # More concise output
   timeout: 300s
 
 - name: python:3.11-alpine

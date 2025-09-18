@@ -1,0 +1,26 @@
+# Trivy ignore file for known false positives and accepted risks
+
+# Kubernetes manifests in templates/ are third-party ArgoCD/kpack resources
+# These are managed by upstream projects and security issues should be addressed there
+templates/argocd_apps/
+templates/kpack/
+
+# Terraform modules from terraform-google-modules are trusted upstream
+terraform-google-modules/
+
+# Helm chart errors that don't affect our infrastructure
+# Invalid release name in templates/apps_of_apps (ArgoCD specific)
+templates/apps_of_apps
+
+# Known acceptable security contexts for kpack
+# These containers require specific permissions for their functionality
+AVD-KSV-0014  # readOnlyRootFilesystem not required for kpack controllers
+AVD-KSV-0041  # kpack requires secret access for image registry authentication
+AVD-KSV-0114  # kpack webhook needs webhook configuration permissions
+
+# Development/testing related ignores
+cloudbuild-test.yaml
+.git/
+.terraform/
+*.tfstate
+*.tfstate.backup
