@@ -1,3 +1,7 @@
+# Project Configuration
+project_id                     = "cluster-dreams"                         # Replace with your actual GCP project ID
+compute_engine_service_account = "create"                                 # Creates a new service account for the nodes
+
 # Cluster Configuration
 # Defines basic properties of the GKE cluster including names and location.
 cluster_name        = "cluster"                                           # Base name of the cluster
@@ -5,12 +9,13 @@ region              = "us-central1"                                       # The 
 zones               = ["us-central1-c", "us-central1-b", "us-central1-a"] # Zones within the region for cluster deployment
 cluster_name_suffix = "dev"                                               # Suffix to append to the cluster name indicating the environment
 
-# Network Configuration
-# Specifies the network settings for the cluster.
-network           = "gke-network"     # Name of the GCP network to use for the cluster
-subnetwork        = "gke-subnet"      # Name of the GCP subnetwork to use
-ip_range_pods     = "192.168.0.0/18"  # CIDR block for pod IP allocation
-ip_range_services = "192.168.64.0/18" # CIDR block for service IP allocation
+# Network Configuration (LEGACY - Used with old per-workspace networks)
+# NOTE: With shared network architecture, these are used for backwards compatibility only
+# The actual network configuration is now managed in shared-network.tf
+network           = "gke-network"     # Legacy: Name of the GCP network (kept for compatibility)
+subnetwork        = "gke-subnet"      # Legacy: Name of the GCP subnetwork (kept for compatibility)
+ip_range_pods     = "***********/18"  # Legacy: CIDR block for pod IP allocation
+ip_range_services = "************/18" # Legacy: CIDR block for service IP allocation
 
 # ArgoCD Configuration
 # Sets up ArgoCD in the cluster to manage deployments and configurations.
