@@ -817,12 +817,19 @@ steps:
   - apply-staging
   args:
   - -c
-  - "\n                echo \"=== Build Summary ===\"\n                if [ -f \"\
-    $BUILD_ID-status.env\" ]; then\n                    cat $BUILD_ID-status.env\n\
-    \                fi\n                \n                echo \"BUILD_END=$(date\
-    \ -Iseconds)\" >> $BUILD_ID-status.env\n                echo \"Build completed\
-    \ at $(date)\"\n                echo \"====================\"\n              \
-    \  "
+  - |
+    echo "=== Build Summary ==="
+    if [ -f "$BUILD_ID-status.env" ]; then
+        cat $BUILD_ID-status.env
+    fi
+
+    echo "BUILD_END=$(date -Iseconds)" >> $BUILD_ID-status.env
+    echo "Build completed at $(date)"
+    echo "===================="
+
+    # Ensure all expected artifacts exist (create empty ones if missing)
+    touch $BUILD_ID-plan-summary.txt
+    echo "Artifact preparation completed"
   timeout: 60s
 timeout: 3600s
 options:
