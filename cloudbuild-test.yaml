@@ -1,0 +1,120 @@
+steps:
+# Environment info step - test basic functionality
+- name: alpine:3.18
+  id: environment-info
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "=== Build Environment Information ==="
+    echo "Build ID: $BUILD_ID"
+    echo "Branch Name: $BRANCH_NAME"
+    echo "Pull Request: ${_PR_NUMBER:-'N/A'}"
+    echo "Project ID: $PROJECT_ID"
+    echo "Region: ${LOCATION:-'N/A'}"
+    echo "Trigger Name: ${TRIGGER_NAME:-'N/A'}"
+    echo "Repository: ${REPO_FULL_NAME:-'N/A'}"
+    echo "Commit SHA: ${COMMIT_SHA:-'N/A'}"
+    echo "=================================="
+
+    # Create status tracking file
+    echo "BUILD_START=$(date -Iseconds)" > $BUILD_ID-status.env
+    echo "WORKSPACES=${_WORKSPACES:-}" >> $BUILD_ID-status.env
+  timeout: 60s
+
+# Test Trivy filesystem scan
+- name: aquasec/trivy:latest
+  id: trivy-fs-scan
+  entrypoint: trivy
+  args:
+  - 'fs'
+  - '--format'
+  - 'table'
+  - '--severity'
+  - 'HIGH,CRITICAL'
+  - '--exit-code'
+  - '0'  # Don't fail on findings for testing
+  - '.'
+  env:
+  - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
+  timeout: 300s
+
+# Test Trivy config scan
+- name: aquasec/trivy:latest
+  id: trivy-config-scan
+  entrypoint: trivy
+  args:
+  - 'config'
+  - '--format'
+  - 'table'
+  - '--exit-code'
+  - '0'  # Don't fail on findings for testing
+  - '--severity'
+  - 'HIGH,CRITICAL'
+  - '.'
+  env:
+  - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
+  timeout: 300s
+
+# Test Checkov scan
+- name: bridgecrew/checkov:latest
+  id: checkov-scan
+  entrypoint: checkov
+  args:
+  - '--directory'
+  - '.'
+  - '--framework'
+  - 'terraform'
+  - '--output'
+  - 'cli'
+  - '--soft-fail'  # Don't fail for testing
+  timeout: 300s
+
+# Test simple terraform validation
+- name: hashicorp/terraform:1.11
+  id: terraform-validate
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "Testing Terraform validation..."
+    terraform version
+
+    # Check if we have terraform files
+    if [ -f "*.tf" ]; then
+      echo "Found Terraform files, validating..."
+      terraform init -backend=false
+      terraform validate
+    else
+      echo "No Terraform files found in root"
+      find . -name "*.tf" -type f | head -5
+    fi
+  timeout: 300s
+
+# Summary step
+- name: alpine:3.18
+  id: test-summary
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "=== Test Pipeline Summary ==="
+    if [ -f "$BUILD_ID-status.env" ]; then
+      cat $BUILD_ID-status.env
+    fi
+    echo "Test BUILD_END=$(date -Iseconds)"
+    echo "Test pipeline completed successfully!"
+    echo "============================="
+  timeout: 60s
+
+timeout: 1800s
+options:
+  substitutionOption: ALLOW_LOOSE
+  logging: CLOUD_LOGGING_ONLY
+  logStreamingOption: STREAM_ON
+  machineType: E2_HIGHCPU_8
+
+substitutions:
+  _PR_NUMBER: ''
+  _WORKSPACES: 'gitops,dev,staging'
+  _TERRAFORM_VERSION: '1.11'
