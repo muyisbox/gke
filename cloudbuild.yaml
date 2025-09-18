@@ -1,6 +1,7 @@
 steps:
-- name: gcr.io/cloud-builders/bash
+- name: alpine:3.18
   id: environment-info
+  entrypoint: /bin/sh
   args:
   - -c
   - "\n                echo \"=== Build Environment Information ===\"\n          \
@@ -359,7 +360,7 @@ steps:
   args:
   - -c
   - "\n                    if [ \"$BRANCH_NAME\" = \"main\" ] || [ \"$BRANCH_NAME\"\
-    \ = \"master\" ]; then\n                        echo \"Applying plan for workspace:\
+    \ = \"master\" ] || [ -n \"${_PR_NUMBER:-}\" ]; then\n                        echo \"Applying plan for workspace:\
     \ dev\"\n                        \nset -euo pipefail  # Exit on error, undefined\
     \ variables, pipe failures\n\n# Workspace management with exponential backoff\n\
     setup_workspace() {\n    local workspace_name=\"dev\"\n    local wait_time=5\n\
@@ -699,8 +700,9 @@ steps:
     \ allowed on branch $BRANCH_NAME\"\n                    fi\n                 \
     \   "
   timeout: 1800s
-- name: gcr.io/cloud-builders/bash
+- name: alpine:3.18
   id: build-summary
+  entrypoint: /bin/sh
   waitFor:
   - apply-gitops
   - apply-dev
