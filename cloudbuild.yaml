@@ -227,7 +227,7 @@ steps:
     \ >> $BUILD_ID-status.env\n        \n        # Extract plan summary\n        echo\
     \ \"Plan Summary:\" >> $BUILD_ID-plan-summary.txt\n        grep -E \"(Plan:|Changes\
     \ to Outputs:)\" \"$plan_output\" >> $BUILD_ID-plan-summary.txt || true\n    \
-    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n\n          \
+    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n# Ensure build step succeeds for exit codes 0 and 2\nexit 0\n\n          \
     \          else\n                        echo \"Skipping plan on branch $BRANCH_NAME\"\
     \n                    fi\n                    "
   timeout: 1200s
@@ -456,7 +456,7 @@ steps:
     \ >> $BUILD_ID-status.env\n        \n        # Extract plan summary\n        echo\
     \ \"Plan Summary:\" >> $BUILD_ID-plan-summary.txt\n        grep -E \"(Plan:|Changes\
     \ to Outputs:)\" \"$plan_output\" >> $BUILD_ID-plan-summary.txt || true\n    \
-    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n\n          \
+    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n# Ensure build step succeeds for exit codes 0 and 2\nexit 0\n\n          \
     \          else\n                        echo \"Skipping plan on branch $BRANCH_NAME\"\
     \n                    fi\n                    "
   timeout: 1200s
@@ -685,7 +685,7 @@ steps:
     \ >> $BUILD_ID-status.env\n        \n        # Extract plan summary\n        echo\
     \ \"Plan Summary:\" >> $BUILD_ID-plan-summary.txt\n        grep -E \"(Plan:|Changes\
     \ to Outputs:)\" \"$plan_output\" >> $BUILD_ID-plan-summary.txt || true\n    \
-    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n\n          \
+    \    ;;\nesac\n\necho \"Plan created successfully: $plan_file\"\n# Ensure build step succeeds for exit codes 0 and 2\nexit 0\n\n          \
     \          else\n                        echo \"Skipping plan on branch $BRANCH_NAME\"\
     \n                    fi\n                    "
   timeout: 1200s
