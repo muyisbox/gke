@@ -1,9 +1,10 @@
 ---
-installCRDs: true
+crds:
+  enabled: true
 replicaCount: 2
 prometheus:
   enabled: true
   servicemonitor:
     enabled: true
     labels:
-      release: prometheus-48-3-0
+      release: prometheus-monitoring

@@ -1,10 +1,5 @@
 locals {
   cluster_types = toset(["gitops", "dev", "staging"])
-  subnet_cidrs = {
-    gitops  = "10.0.0.0/17"
-    dev     = "10.1.0.0/17"
-    staging = "10.2.0.0/17"
-  }
   # Master CIDR offsets for different environments
   master_cidr_offsets = {
     dev     = "0"
@@ -12,51 +7,142 @@ locals {
     gitops  = "2"
   }
   apps = {
+    # --- Monitoring ---
     prometheus = {
       name           = "prometheus-monitoring"
       chart          = "kube-prometheus-stack"
       repoURL        = "https://prometheus-community.github.io/helm-charts"
-      targetRevision = "57.2.0"
+      targetRevision = "82.10.3"
       project        = "boeing"
       namespace      = "monitoring"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-prometheus.yaml")))
     }
+    loki = {
+      name           = "loki"
+      chart          = "loki"
+      repoURL        = "https://grafana.github.io/helm-charts"
+      targetRevision = "6.54.0"
+      project        = "boeing"
+      namespace      = "logging"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-loki.yaml")))
+    }
+    kiali = {
+      name           = "kiali-server"
+      chart          = "kiali-server"
+      repoURL        = "https://kiali.org/helm-charts"
+      targetRevision = "2.23.0"
+      project        = "boeing"
+      namespace      = "istio-system"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-kiali.yaml")))
+    }
+
+    # --- Service Mesh (Istio) ---
     istio-base = {
-      name           = "istio-base-1-21"
+      name           = "istio-base"
       chart          = "base"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
-      targetRevision = "1.21.*"
+      targetRevision = "1.24.*"
       project        = "boeing"
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-base.yaml")))
     }
     istiod = {
-      name           = "istiod-1-21"
+      name           = "istiod"
       chart          = "istiod"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
-      targetRevision = "1.21.*"
+      targetRevision = "1.24.*"
       project        = "boeing"
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
-    }
-    vpa = {
-      name           = "vpa"
-      chart          = "vpa"
-      repoURL        = "https://charts.fairwinds.com/stable"
-      targetRevision = "4.4.6"
-      project        = "boeing"
-      namespace      = "vpa"
-      values         = indent(8, yamlencode(file("${path.module}/templates/values-vpa.yaml")))
     }
     istio-gateway = {
       name           = "istio-ingressgateway"
       chart          = "gateway"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
-      targetRevision = "1.21.*"
+      targetRevision = "1.24.*"
       project        = "boeing"
       namespace      = "istio-gateways"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-gateway.yaml")))
     }
+
+    # --- Certificate Management ---
+    cert-manager = {
+      name           = "cert-manager"
+      chart          = "cert-manager"
+      repoURL        = "https://charts.jetstack.io"
+      targetRevision = "1.17.0"
+      project        = "boeing"
+      namespace      = "cert-manager"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
+    }
+
+    # --- Autoscaling ---
+    vpa = {
+      name           = "vpa"
+      chart          = "vpa"
+      repoURL        = "https://charts.fairwinds.com/stable"
+      targetRevision = "4.7.1"
+      project        = "boeing"
+      namespace      = "vpa"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-vpa.yaml")))
+    }
+
+    # --- Deployments ---
+    argo-rollouts = {
+      name           = "argo-rollouts"
+      chart          = "argo-rollouts"
+      repoURL        = "https://argoproj.github.io/argo-helm"
+      targetRevision = "2.40.6"
+      project        = "boeing"
+      namespace      = "argo-rollouts"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
+    }
+
+    # --- External Secrets Operator ---
+    external-secrets = {
+      name           = "external-secrets"
+      chart          = "external-secrets"
+      repoURL        = "https://charts.external-secrets.io"
+      targetRevision = "0.14.0"
+      project        = "boeing"
+      namespace      = "external-secrets"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-external-secrets.yaml")))
+    }
+
+    # --- External DNS ---
+    external-dns = {
+      name           = "external-dns"
+      chart          = "external-dns"
+      repoURL        = "https://kubernetes-sigs.github.io/external-dns"
+      targetRevision = "1.15.2"
+      project        = "boeing"
+      namespace      = "external-dns"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-external-dns.yaml")))
+    }
+
+    # --- Metrics Server ---
+    metrics-server = {
+      name           = "metrics-server"
+      chart          = "metrics-server"
+      repoURL        = "https://kubernetes-sigs.github.io/metrics-server"
+      targetRevision = "3.12.2"
+      project        = "boeing"
+      namespace      = "kube-system"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-metrics-server.yaml")))
+    }
+
+    # --- Reloader (auto-restart pods on ConfigMap/Secret changes) ---
+    reloader = {
+      name           = "reloader"
+      chart          = "reloader"
+      repoURL        = "https://stakater.github.io/stakater-charts"
+      targetRevision = "1.2.0"
+      project        = "boeing"
+      namespace      = "reloader"
+      values         = indent(8, yamlencode(file("${path.module}/templates/values-reloader.yaml")))
+    }
+
+    # --- Sample App ---
     bookinfo = {
       name           = "bookinfo"
       chart          = "bookinfo"
@@ -66,60 +152,6 @@ locals {
       namespace      = "bookinfo"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-bookinfo.yaml")))
     }
-    cert-manager = {
-      name           = "cert-manager"
-      chart          = "cert-manager"
-      repoURL        = "https://charts.jetstack.io"
-      targetRevision = "1.14.4"
-      project        = "boeing"
-      namespace      = "cert-manager"
-      values         = indent(8, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
-    }
-    # kpack = {
-    #   name           = "kpack-chart"
-    #   chart          = "kpack-chart"
-    #   repoURL        = "oci://registry-1.docker.io/muyisbox"
-    #   targetRevision = "0.11.2"
-    #   project        = "boeing"
-    #   namespace      = "kpack"
-    #   values         = indent(8, yamlencode(file("${path.module}/templates/values-kpack.yaml")))
-    # }
-    loki = {
-      name           = "loki-stack"
-      chart          = "loki-stack"
-      repoURL        = "https://grafana.github.io/helm-charts"
-      targetRevision = "2.10.2"
-      project        = "boeing"
-      namespace      = "logging"
-      values         = indent(8, yamlencode(file("${path.module}/templates/values-loki.yaml")))
-    }
-    kiali = {
-      name           = "kiali-server"
-      chart          = "kiali-server"
-      repoURL        = "https://kiali.org/helm-charts"
-      targetRevision = "1.77.0"
-      project        = "boeing"
-      namespace      = "istio-system"
-      values         = indent(8, yamlencode(file("${path.module}/templates/values-kiali.yaml")))
-    }
-    argo-rollouts = {
-      name           = "argo-rollouts"
-      chart          = "argo-rollouts"
-      repoURL        = "https://argoproj.github.io/argo-helm"
-      targetRevision = "2.35.*"
-      project        = "boeing"
-      namespace      = "argo-rollouts"
-      values         = indent(8, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
-    }
-    # kuma = {
-    #   name           = "kuma"
-    #   chart          = "kuma"
-    #   repoURL        = "https://kumahq.github.io/charts"
-    #   targetRevision = "2.5.*"
-    #   project        = "boeing"
-    #   namespace      = "kong-mesh-system"
-    #   values         = indent(8, yamlencode(file("${path.module}/templates/values-kuma.yaml")))
-    # }
   }
   charts = {
     argocd = {
@@ -183,7 +215,20 @@ locals {
         namespace   = "argocd"
         finalizers  = ["resources-finalizer.argocd.argoproj.io"]
         description = "A Sample Project to Deploy applications into Boing Clusters"
-        sourceRepos = ["*"]
+        sourceRepos = [
+          "https://prometheus-community.github.io/helm-charts",
+          "https://istio-release.storage.googleapis.com/charts",
+          "https://charts.fairwinds.com/stable",
+          "https://basic-techno.github.io/helm-charts/",
+          "https://charts.jetstack.io",
+          "https://grafana.github.io/helm-charts",
+          "https://kiali.org/helm-charts",
+          "https://argoproj.github.io/argo-helm",
+          "https://charts.external-secrets.io",
+          "https://kubernetes-sigs.github.io/external-dns",
+          "https://kubernetes-sigs.github.io/metrics-server",
+          "https://stakater.github.io/stakater-charts",
+        ]
         destinations = [
           {
             name      = "*"

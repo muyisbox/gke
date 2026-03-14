@@ -9,13 +9,6 @@ region              = "us-central1"                                       # The 
 zones               = ["us-central1-c", "us-central1-b", "us-central1-a"] # Zones within the region for cluster deployment
 cluster_name_suffix = "dev"                                               # Suffix to append to the cluster name indicating the environment
 
-# Network Configuration (LEGACY - Used with old per-workspace networks)
-# NOTE: With shared network architecture, these are used for backwards compatibility only
-# The actual network configuration is now managed in shared-network.tf
-network           = "gke-network"     # Legacy: Name of the GCP network (kept for compatibility)
-subnetwork        = "gke-subnet"      # Legacy: Name of the GCP subnetwork (kept for compatibility)
-ip_range_pods     = "***********/18"  # Legacy: CIDR block for pod IP allocation
-ip_range_services = "************/18" # Legacy: CIDR block for service IP allocation
 
 # ArgoCD Configuration
 # Sets up ArgoCD in the cluster to manage deployments and configurations.
@@ -23,7 +16,7 @@ argocd = {
   namespace = "argocd" # Kubernetes namespace where ArgoCD is deployed
   app = {
     name             = "argo-cd" # Name of the ArgoCD application
-    version          = "8.2.6"   # Version of ArgoCD to deploy
+    version          = "9.4.10"  # ArgoCD v3.3.3
     chart            = "argo-cd" # Helm chart name for ArgoCD
     force_update     = true      # Force update the app if true
     wait             = false     # If true, the Terraform provider waits for the app to be fully deployed
@@ -39,7 +32,7 @@ argocd_apps = {
   namespace = "argocd" # Kubernetes namespace for ArgoCD applications
   app = {
     name             = "argocd-apps" # Name of the app deployment managed by ArgoCD
-    version          = "2.0.0"       # Version of the app to deploy
+    version          = "2.0.4"       # Version of the app to deploy
     chart            = "argocd-apps" # Helm chart for the app
     force_update     = true          # Force update the app if set to true
     wait             = false         # Wait for full deployment if true
