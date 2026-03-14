@@ -1,18 +1,16 @@
 ---
-# Reloader values
-reloader:
-  watchGlobally: true
-  readOnlyRootFilesystem: true
+# Reloader 2.x values
+watchGlobally: true
+readOnlyRootFilesystem: true
 
-  deployment:
-    resources:
-      requests:
-        cpu: 10m
-        memory: 64Mi
-      limits:
-        memory: 128Mi
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
 
-  serviceMonitor:
-    enabled: true
-    labels:
-      release: prometheus-monitoring
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus-monitoring

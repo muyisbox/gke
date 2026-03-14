@@ -70,7 +70,7 @@ locals {
       name           = "cert-manager"
       chart          = "cert-manager"
       repoURL        = "https://charts.jetstack.io"
-      targetRevision = "1.17.0"
+      targetRevision = "1.20.0"
       project        = "boeing"
       namespace      = "cert-manager"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
@@ -81,7 +81,7 @@ locals {
       name           = "vpa"
       chart          = "vpa"
       repoURL        = "https://charts.fairwinds.com/stable"
-      targetRevision = "4.7.1"
+      targetRevision = "4.10.1"
       project        = "boeing"
       namespace      = "vpa"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-vpa.yaml")))
@@ -103,7 +103,7 @@ locals {
       name           = "external-secrets"
       chart          = "external-secrets"
       repoURL        = "https://charts.external-secrets.io"
-      targetRevision = "0.14.0"
+      targetRevision = "2.1.0"
       project        = "boeing"
       namespace      = "external-secrets"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-external-secrets.yaml")))
@@ -114,7 +114,7 @@ locals {
       name           = "external-dns"
       chart          = "external-dns"
       repoURL        = "https://kubernetes-sigs.github.io/external-dns"
-      targetRevision = "1.15.2"
+      targetRevision = "1.20.0"
       project        = "boeing"
       namespace      = "external-dns"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-external-dns.yaml")))
@@ -125,7 +125,7 @@ locals {
       name           = "metrics-server"
       chart          = "metrics-server"
       repoURL        = "https://kubernetes-sigs.github.io/metrics-server"
-      targetRevision = "3.12.2"
+      targetRevision = "3.13.0"
       project        = "boeing"
       namespace      = "kube-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-metrics-server.yaml")))
@@ -136,7 +136,7 @@ locals {
       name           = "reloader"
       chart          = "reloader"
       repoURL        = "https://stakater.github.io/stakater-charts"
-      targetRevision = "1.2.0"
+      targetRevision = "2.2.9"
       project        = "boeing"
       namespace      = "reloader"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-reloader.yaml")))
