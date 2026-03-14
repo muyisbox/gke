@@ -41,7 +41,7 @@ locals {
       name           = "istio-base"
       chart          = "base"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
-      targetRevision = "1.24.*"
+      targetRevision = "1.29.*"
       project        = "boeing"
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-base.yaml")))
@@ -50,7 +50,7 @@ locals {
       name           = "istiod"
       chart          = "istiod"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
-      targetRevision = "1.24.*"
+      targetRevision = "1.29.*"
       project        = "boeing"
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
@@ -59,7 +59,7 @@ locals {
       name           = "istio-ingressgateway"
       chart          = "gateway"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
-      targetRevision = "1.24.*"
+      targetRevision = "1.29.*"
       project        = "boeing"
       namespace      = "istio-gateways"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-gateway.yaml")))
