@@ -13,19 +13,18 @@ module "gke" {
   ip_range_pods              = "${terraform.workspace}-pods"
   ip_range_services          = "${terraform.workspace}-services"
   http_load_balancing        = false
-  network_policy             = false
+  network_policy             = true
   horizontal_pod_autoscaling = true
   filestore_csi_driver       = false
-  release_channel            = "UNSPECIFIED"
-  kubernetes_version         = data.google_container_engine_versions.gke-version.latest_master_version
+  release_channel            = "REGULAR"
 
   node_pools = [
     {
       name               = "node-pool-01"
-      machine_type       = "c2-standard-4"
+      machine_type       = "e2-standard-4"
       node_locations     = "us-central1-b,us-central1-c"
       min_count          = 1
-      max_count          = 2
+      max_count          = 4
       local_ssd_count    = 0
       spot               = true
       disk_size_gb       = 20
@@ -34,31 +33,10 @@ module "gke" {
       enable_gcfs        = false
       enable_gvnic       = false
       auto_repair        = true
-      auto_upgrade       = false
+      auto_upgrade       = true
       service_account    = var.compute_engine_service_account
       preemptible        = false
       initial_node_count = 1
-      version            = data.google_container_engine_versions.gke-version.latest_node_version
-    },
-    {
-      name               = "node-pool-02"
-      machine_type       = "c2-standard-4"
-      node_locations     = "us-central1-b,us-central1-c"
-      min_count          = 1
-      max_count          = 2
-      local_ssd_count    = 0
-      spot               = true
-      disk_size_gb       = 20
-      disk_type          = "pd-standard"
-      image_type         = "COS_CONTAINERD"
-      enable_gcfs        = false
-      enable_gvnic       = false
-      auto_repair        = true
-      auto_upgrade       = false
-      service_account    = var.compute_engine_service_account
-      preemptible        = false
-      initial_node_count = 1
-      version            = data.google_container_engine_versions.gke-version.latest_node_version
     },
   ]
 
