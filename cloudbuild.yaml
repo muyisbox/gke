@@ -219,7 +219,7 @@ steps:
     $(dirname \"$plan_file\")\"\n\n# Generate plan with detailed output\nset +eo pipefail\nterraform\
     \ plan \\\n    -detailed-exitcode \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
     \ \\\n    -var=\"project_id=$PROJECT_ID\" \\\n    -out=\"$plan_file\" \\\n   \
-    \ | tee \"$plan_output\"\nplan_exit_code=${PIPESTATUS[0]}\nset -e\n\ncase\
+    \ > \"$plan_output\" 2>&1; plan_exit_code=$?\ncat \"$plan_output\"\nset -e\n\ncase\
     \ $plan_exit_code in\n    0)\n        echo \"No changes detected in plan\"\n \
     \       echo \"PLAN_STATUS=NO_CHANGES\" >> $BUILD_ID-status.env\n        ;;\n\
     \    1)\n        echo \"Plan failed\"\n        exit 1\n        ;;\n    2)\n  \
@@ -448,7 +448,7 @@ steps:
     $(dirname \"$plan_file\")\"\n\n# Generate plan with detailed output\nset +eo pipefail\nterraform\
     \ plan \\\n    -detailed-exitcode \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
     \ \\\n    -var=\"project_id=$PROJECT_ID\" \\\n    -out=\"$plan_file\" \\\n   \
-    \ | tee \"$plan_output\"\nplan_exit_code=${PIPESTATUS[0]}\nset -e\n\ncase\
+    \ > \"$plan_output\" 2>&1; plan_exit_code=$?\ncat \"$plan_output\"\nset -e\n\ncase\
     \ $plan_exit_code in\n    0)\n        echo \"No changes detected in plan\"\n \
     \       echo \"PLAN_STATUS=NO_CHANGES\" >> $BUILD_ID-status.env\n        ;;\n\
     \    1)\n        echo \"Plan failed\"\n        exit 1\n        ;;\n    2)\n  \
@@ -677,7 +677,7 @@ steps:
     $(dirname \"$plan_file\")\"\n\n# Generate plan with detailed output\nset +eo pipefail\nterraform\
     \ plan \\\n    -detailed-exitcode \\\n    -parallelism=30 \\\n    -var=\"compute_engine_service_account=terraform@$PROJECT_ID.iam.gserviceaccount.com\"\
     \ \\\n    -var=\"project_id=$PROJECT_ID\" \\\n    -out=\"$plan_file\" \\\n   \
-    \ | tee \"$plan_output\"\nplan_exit_code=${PIPESTATUS[0]}\nset -e\n\ncase\
+    \ > \"$plan_output\" 2>&1; plan_exit_code=$?\ncat \"$plan_output\"\nset -e\n\ncase\
     \ $plan_exit_code in\n    0)\n        echo \"No changes detected in plan\"\n \
     \       echo \"PLAN_STATUS=NO_CHANGES\" >> $BUILD_ID-status.env\n        ;;\n\
     \    1)\n        echo \"Plan failed\"\n        exit 1\n        ;;\n    2)\n  \
