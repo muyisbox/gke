@@ -1,8 +1,11 @@
 # Shared Network Infrastructure
 # This creates a single VPC network with one NAT Gateway that all clusters can use
+# Only created in 'dev' workspace to avoid conflicts; other workspaces reference it
 
-# Shared VPC Network (create once, use for all clusters)
+# Shared VPC Network (create once in dev workspace)
 module "shared-network" {
+  count = terraform.workspace == "dev" ? 1 : 0
+
   source  = "terraform-google-modules/network/google"
   version = ">= 4.0.1"
 
@@ -67,19 +70,28 @@ module "shared-network" {
   }
 }
 
-# Single Cloud Router (shared across all clusters)
+# Data source to reference existing network in non-dev workspaces
+data "google_compute_network" "shared_network" {
+  count   = terraform.workspace != "dev" ? 1 : 0
+  project = var.project_id
+  name    = "shared-gke-network"
+}
+
+# Single Cloud Router (shared across all clusters, only created in dev)
 resource "google_compute_router" "shared_router" {
+  count   = terraform.workspace == "dev" ? 1 : 0
   project = var.project_id
   name    = "shared-gke-router"
-  network = module.shared-network.network_name
+  network = module.shared-network[0].network_name
   region  = var.region
 }
 
-# Single Cloud NAT (shared across all clusters)
+# Single Cloud NAT (shared across all clusters, only created in dev)
 resource "google_compute_router_nat" "shared_nat" {
+  count                              = terraform.workspace == "dev" ? 1 : 0
   project                            = var.project_id
   name                               = "shared-gke-nat"
-  router                             = google_compute_router.shared_router.name
+  router                             = google_compute_router.shared_router[0].name
   region                             = var.region
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
