@@ -1,10 +1,10 @@
 # Shared Network Infrastructure
-# This creates a single VPC network with one NAT Gateway that all clusters can use
-# Only created in 'dev' workspace to avoid conflicts; other workspaces reference it
+# GitOps workspace creates and manages the shared network
+# Dev and Staging workspaces reference it via data source
 
-# Shared VPC Network (create once in dev workspace)
+# Shared VPC Network (created only in gitops workspace)
 module "shared-network" {
-  count = terraform.workspace == "dev" ? 1 : 0
+  count = terraform.workspace == "gitops" ? 1 : 0
 
   source  = "terraform-google-modules/network/google"
   version = ">= 4.0.1"
@@ -20,7 +20,7 @@ module "shared-network" {
       subnet_region        = var.region
       subnet_private_access = "true"
     },
-    # Staging environment subnet  
+    # Staging environment subnet
     {
       subnet_name           = "gke-subnet-staging"
       subnet_ip            = "10.20.0.0/17"
@@ -70,25 +70,25 @@ module "shared-network" {
   }
 }
 
-# Data source to reference existing network in non-dev workspaces
+# Data source to reference existing network in non-gitops workspaces
 data "google_compute_network" "shared_network" {
-  count   = terraform.workspace != "dev" ? 1 : 0
+  count   = terraform.workspace != "gitops" ? 1 : 0
   project = var.project_id
   name    = "shared-gke-network"
 }
 
-# Single Cloud Router (shared across all clusters, only created in dev)
+# Single Cloud Router (shared across all clusters, only created in gitops)
 resource "google_compute_router" "shared_router" {
-  count   = terraform.workspace == "dev" ? 1 : 0
+  count   = terraform.workspace == "gitops" ? 1 : 0
   project = var.project_id
   name    = "shared-gke-router"
   network = module.shared-network[0].network_name
   region  = var.region
 }
 
-# Single Cloud NAT (shared across all clusters, only created in dev)
+# Single Cloud NAT (shared across all clusters, only created in gitops)
 resource "google_compute_router_nat" "shared_nat" {
-  count                              = terraform.workspace == "dev" ? 1 : 0
+  count                              = terraform.workspace == "gitops" ? 1 : 0
   project                            = var.project_id
   name                               = "shared-gke-nat"
   router                             = google_compute_router.shared_router[0].name

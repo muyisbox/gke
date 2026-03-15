@@ -6,8 +6,8 @@ locals {
     staging = "1"
     gitops  = "2"
   }
-  # Shared network name - use module in dev, data source in others
-  shared_network_name = terraform.workspace == "dev" ? module.shared-network[0].network_name : data.google_compute_network.shared_network[0].name
+  # Shared network name - gitops creates, others reference via data source
+  shared_network_name = terraform.workspace == "gitops" ? module.shared-network[0].network_name : data.google_compute_network.shared_network[0].name
   apps = {
     # --- Monitoring ---
     prometheus = {
