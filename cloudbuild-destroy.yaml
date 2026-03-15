@@ -1,0 +1,135 @@
+steps:
+# Environment Info
+- name: alpine:3.18
+  id: environment-info
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "=== Scheduled Destroy - Dev & Staging ==="
+    echo "Build ID: $BUILD_ID"
+    echo "Triggered at: $(date)"
+    echo "Workspaces to destroy: dev, staging"
+    echo "========================================"
+  timeout: 60s
+
+# Terraform Init (shared)
+- id: terraform-init
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    set -e
+    terraform init -backend-config="prefix=terraform/state"
+  timeout: 300s
+
+###################
+# DEV WORKSPACE - DESTROY
+###################
+
+- id: destroy-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - terraform-init
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="dev"
+    echo "================================"
+    echo "DESTROYING workspace: $workspace_name"
+    echo "Creating state backup before destroy..."
+    echo "================================"
+
+    # Select workspace
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+
+    # Backup state before destroy
+    if terraform state pull > /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate 2>/dev/null; then
+        echo "State backup created: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
+
+        # Perform destroy
+        echo "Starting destroy operation..."
+        if terraform destroy -auto-approve; then
+            echo "Successfully destroyed workspace: $workspace_name"
+            echo "DESTROY_STATUS=SUCCESS" >> $BUILD_ID-status.env
+        else
+            echo "ERROR: Failed to destroy workspace: $workspace_name"
+            echo "DESTROY_STATUS=FAILED" >> $BUILD_ID-status.env
+            echo "Backup available at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
+            exit 1
+        fi
+    else
+        echo "No state found for workspace: $workspace_name"
+        echo "DESTROY_STATUS=NO_STATE" >> $BUILD_ID-status.env
+    fi
+  timeout: 1800s
+
+###################
+# STAGING WORKSPACE - DESTROY
+###################
+
+- id: destroy-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - destroy-dev
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="staging"
+    echo "================================"
+    echo "DESTROYING workspace: $workspace_name"
+    echo "Creating state backup before destroy..."
+    echo "================================"
+
+    # Select workspace
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+
+    # Backup state before destroy
+    if terraform state pull > /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate 2>/dev/null; then
+        echo "State backup created: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
+
+        # Perform destroy
+        echo "Starting destroy operation..."
+        if terraform destroy -auto-approve; then
+            echo "Successfully destroyed workspace: $workspace_name"
+            echo "DESTROY_STATUS=SUCCESS" >> $BUILD_ID-status.env
+        else
+            echo "ERROR: Failed to destroy workspace: $workspace_name"
+            echo "DESTROY_STATUS=FAILED" >> $BUILD_ID-status.env
+            echo "Backup available at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
+            exit 1
+        fi
+    else
+        echo "No state found for workspace: $workspace_name"
+        echo "DESTROY_STATUS=NO_STATE" >> $BUILD_ID-status.env
+    fi
+  timeout: 1800s
+
+# Summary
+- name: alpine:3.18
+  id: destroy-summary
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "================================"
+    echo "Scheduled Destroy Complete"
+    echo "Destroyed workspaces: dev, staging"
+    echo "GitOps workspace: PRESERVED (has shared network)"
+    echo "Completed at: $(date)"
+    echo "Next recreation: 10 AM EST"
+    echo "================================"
+  timeout: 60s
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 3600s

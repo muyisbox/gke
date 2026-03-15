@@ -1,0 +1,245 @@
+steps:
+# Environment Info
+- name: alpine:3.18
+  id: environment-info
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "=== Scheduled Recreation - Dev & Staging ==="
+    echo "Build ID: $BUILD_ID"
+    echo "Triggered at: $(date)"
+    echo "Workspaces to create: dev, staging"
+    echo "============================================"
+  timeout: 60s
+
+# Terraform Init (shared)
+- id: terraform-init
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    set -e
+    terraform init -backend-config="prefix=terraform/state"
+  timeout: 300s
+
+###################
+# DEV WORKSPACE - CREATE
+###################
+
+- id: setup-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - terraform-init
+  args:
+  - -c
+  - |
+    echo "Setting up workspace: dev"
+
+    setup_workspace() {
+        local workspace_name="dev"
+        local wait_time=5
+        local max_wait_time=120
+
+        echo "Selecting or creating workspace: $workspace_name"
+
+        if ! terraform workspace select $workspace_name 2>/dev/null; then
+            echo "Workspace $workspace_name does not exist, creating..."
+            if ! terraform workspace new $workspace_name; then
+                echo "Failed to create workspace, retrying in ${wait_time}s..."
+                sleep $wait_time
+                terraform workspace new $workspace_name || {
+                    echo "Failed to create workspace after retry"
+                    return 1
+                }
+            fi
+        fi
+
+        echo "Successfully selected workspace: $workspace_name"
+        terraform workspace show
+        return 0
+    }
+
+    setup_workspace
+  timeout: 300s
+
+- id: plan-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - setup-dev
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="dev"
+    plan_file="/workspace/$BUILD_ID/tfplan_dev"
+
+    echo "Creating plan for workspace: $workspace_name"
+    mkdir -p "/workspace/$BUILD_ID"
+
+    terraform workspace select $workspace_name
+    terraform plan -out="$plan_file"
+
+    echo "Plan created successfully: $plan_file"
+  timeout: 600s
+
+- id: apply-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - plan-dev
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="dev"
+    plan_file="/workspace/$BUILD_ID/tfplan_dev"
+
+    echo "================================"
+    echo "Applying workspace: $workspace_name"
+    echo "================================"
+
+    # Backup state before apply
+    if terraform state pull > /tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate 2>/dev/null; then
+        echo "State backup created successfully"
+    fi
+
+    # Apply the plan
+    terraform workspace select $workspace_name
+
+    if terraform apply "$plan_file"; then
+        echo "Successfully applied workspace: $workspace_name"
+        echo "APPLY_STATUS_DEV=SUCCESS" >> $BUILD_ID-status.env
+    else
+        echo "ERROR: Apply failed for workspace: $workspace_name"
+        echo "APPLY_STATUS_DEV=FAILED" >> $BUILD_ID-status.env
+        echo "Backup available at: /tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate"
+        exit 1
+    fi
+  timeout: 1800s
+
+###################
+# STAGING WORKSPACE - CREATE
+###################
+
+- id: setup-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - apply-dev
+  args:
+  - -c
+  - |
+    echo "Setting up workspace: staging"
+
+    setup_workspace() {
+        local workspace_name="staging"
+        local wait_time=5
+        local max_wait_time=120
+
+        echo "Selecting or creating workspace: $workspace_name"
+
+        if ! terraform workspace select $workspace_name 2>/dev/null; then
+            echo "Workspace $workspace_name does not exist, creating..."
+            if ! terraform workspace new $workspace_name; then
+                echo "Failed to create workspace, retrying in ${wait_time}s..."
+                sleep $wait_time
+                terraform workspace new $workspace_name || {
+                    echo "Failed to create workspace after retry"
+                    return 1
+                }
+            fi
+        fi
+
+        echo "Successfully selected workspace: $workspace_name"
+        terraform workspace show
+        return 0
+    }
+
+    setup_workspace
+  timeout: 300s
+
+- id: plan-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - setup-staging
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="staging"
+    plan_file="/workspace/$BUILD_ID/tfplan_staging"
+
+    echo "Creating plan for workspace: $workspace_name"
+    mkdir -p "/workspace/$BUILD_ID"
+
+    terraform workspace select $workspace_name
+    terraform plan -out="$plan_file"
+
+    echo "Plan created successfully: $plan_file"
+  timeout: 600s
+
+- id: apply-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - plan-staging
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="staging"
+    plan_file="/workspace/$BUILD_ID/tfplan_staging"
+
+    echo "================================"
+    echo "Applying workspace: $workspace_name"
+    echo "================================"
+
+    # Backup state before apply
+    if terraform state pull > /tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate 2>/dev/null; then
+        echo "State backup created successfully"
+    fi
+
+    # Apply the plan
+    terraform workspace select $workspace_name
+
+    if terraform apply "$plan_file"; then
+        echo "Successfully applied workspace: $workspace_name"
+        echo "APPLY_STATUS_STAGING=SUCCESS" >> $BUILD_ID-status.env
+    else
+        echo "ERROR: Apply failed for workspace: $workspace_name"
+        echo "APPLY_STATUS_STAGING=FAILED" >> $BUILD_ID-status.env
+        echo "Backup available at: /tmp/terraform_${workspace_name}_backup_${BUILD_ID}.tfstate"
+        exit 1
+    fi
+  timeout: 1800s
+
+# Summary
+- name: alpine:3.18
+  id: create-summary
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "================================"
+    echo "Scheduled Recreation Complete"
+    echo "Recreated workspaces: dev, staging"
+    echo "GitOps workspace: Already running"
+    echo "Completed at: $(date)"
+    echo "Next destroy: 2 AM EST"
+    echo "================================"
+  timeout: 60s
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 3600s
