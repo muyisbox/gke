@@ -88,11 +88,11 @@ module "gke" {
   depends_on = [module.shared-network]
 }
 
-# Grant the Terraform/Cloud Build service account container.admin scoped to this cluster
+# Grant the Terraform service account container.admin scoped to this cluster
 resource "google_project_iam_member" "terraform_cluster_admin" {
   project = var.project_id
   role    = "roles/container.admin"
-  member  = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
+  member  = "serviceAccount:terraform@cluster-dreams.iam.gserviceaccount.com"
 
   condition {
     title       = "${terraform.workspace}-cluster-admin"
