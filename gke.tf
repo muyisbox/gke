@@ -4,7 +4,7 @@ module "gke" {
   name                       = "${terraform.workspace}-cluster"
   region                     = var.region
   zones                      = var.zones
-  network                    = module.shared-network.network_name
+  network                    = local.shared_network_name
   subnetwork                 = "gke-subnet-${terraform.workspace}"
   enable_private_nodes       = true
   enable_private_endpoint    = false
@@ -84,8 +84,6 @@ module "gke" {
       "default-node-pool",
     ]
   }
-
-  depends_on = [module.shared-network]
 }
 
 # Grant the Terraform service account container.admin scoped to this cluster

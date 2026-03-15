@@ -44,17 +44,17 @@ output "cluster_name" {
 
 output "network_name" {
   description = "The name of the VPC being created"
-  value       = module.shared-network.network_name
+  value       = local.shared_network_name
 }
 
 output "subnet_name" {
   description = "The name of the subnet being created"
-  value       = module.shared-network.subnets_names
+  value       = terraform.workspace == "dev" ? module.shared-network[0].subnets_names : ["gke-subnet-${terraform.workspace}"]
 }
 
 output "subnet_secondary_ranges" {
   description = "The secondary ranges associated with the subnet"
-  value       = module.shared-network.subnets_secondary_ranges
+  value       = terraform.workspace == "dev" ? module.shared-network[0].subnets_secondary_ranges : []
 }
 
 
