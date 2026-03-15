@@ -53,9 +53,14 @@ source gcloud-aliases.sh
 
 ### 📁 Important Files
 
-- `cloudbuild.yaml` - Main production pipeline
+- `cloudbuild.yaml` - Main production pipeline (runs on merge to main)
+- `cloudbuild-plan.yaml` - PR plan pipeline (runs on PRs)
 - `cloudbuild-test.yaml` - Test/development pipeline
+- `cloudbuild-destroy.yaml` - Scheduled destroy (2 AM EST)
+- `cloudbuild-create.yaml` - Scheduled recreate (10 AM EST)
 - `gcloud-aliases.sh` - All custom aliases
+- `PR-WORKFLOW.md` - Pull request workflow documentation
+- `SCHEDULED-DESTROY.md` - Cost optimization documentation
 - This file (`CLAUDE.md`) - Instructions for Claude
 
 ### 🔧 Project Context
@@ -63,6 +68,8 @@ source gcloud-aliases.sh
 - **Project**: GKE infrastructure with Terraform
 - **Pipeline**: Multi-environment (dev/staging/gitops)
 - **Security**: Trivy + Checkov scanning enabled
+- **Workflow**: PR-based (plan on PR, apply on merge)
+- **Cost Optimization**: Scheduled destroy/recreate (2 AM - 10 AM EST)
 - **Branch**: Currently on `feature/new-nodes`
 
 ### 🛡️ Security Scanning
@@ -79,6 +86,17 @@ The pipeline includes:
 3. **Use health check** to verify setup
 4. **Reference this file** for project context
 5. **Test incrementally** with cloudbuild-test.yaml
+6. **Use PR workflow** - Never push directly to main
+
+### 🔄 PR Workflow
+
+This project uses automated PR-based workflow:
+
+1. **Create PR** → Triggers `cloudbuild-plan.yaml` → Shows what will change
+2. **Review plan** → Check Cloud Build logs for terraform plan output
+3. **Merge PR** → Triggers `cloudbuild.yaml` → Actually applies changes
+
+**See [PR-WORKFLOW.md](./PR-WORKFLOW.md) for full details**
 
 ### 🚨 Common Issues & Solutions
 
