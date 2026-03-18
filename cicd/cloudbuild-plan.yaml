@@ -1,5 +1,5 @@
 steps:
-# Environment Info - PR Plan Pipeline
+# PR Plan Pipeline - Environment Info
 - name: alpine:3.18
   id: environment-info
   entrypoint: /bin/sh
