@@ -17,6 +17,17 @@ module "gke" {
   horizontal_pod_autoscaling = true
   filestore_csi_driver       = false
   release_channel            = "REGULAR"
+  cluster_autoscaling = {
+    enabled             = true
+    autoscaling_profile = "OPTIMIZE_UTILIZATION"
+    min_cpu_cores       = 0
+    max_cpu_cores       = 48
+    min_memory_gb       = 0
+    max_memory_gb       = 192
+    gpu_resources       = []
+    auto_repair         = true
+    auto_upgrade        = true
+  }
 
   node_pools = [
     {
