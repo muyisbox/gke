@@ -229,46 +229,6 @@ steps:
     echo "================================"
   timeout: 60s
 
-# Post plan summary to PR comment
-- id: post-pr-comment
-  name: gcr.io/cloud-builders/gcloud
-  entrypoint: bash
-  waitFor:
-  - generate-summary
-  args:
-  - -c
-  - |
-    # Skip if not a PR
-    if [ -z "${_PR_NUMBER}" ] || [ "${_PR_NUMBER}" = "" ]; then
-        echo "Not a PR build, skipping comment posting"
-        exit 0
-    fi
-
-    # Skip if GitHub token not configured
-    if [ -z "$GITHUB_TOKEN" ]; then
-        echo "⚠️  GITHUB_TOKEN not configured"
-        echo "To enable PR comments:"
-        echo "1. Create GitHub Personal Access Token with 'repo' scope"
-        echo "2. Store in Secret Manager: gcloud secrets create github-token --data-file=-"
-        echo "3. Grant Cloud Build access: gcloud secrets add-iam-policy-binding github-token \\"
-        echo "     --member=serviceAccount:PROJECT_NUMBER@cloudbuild.gserviceaccount.com \\"
-        echo "     --role=roles/secretmanager.secretAccessor"
-        echo ""
-        echo "Skipping PR comment for now..."
-        exit 0
-    fi
-
-    # Install jq if not available
-    if ! command -v jq &> /dev/null; then
-        echo "Installing jq..."
-        apt-get update && apt-get install -y jq
-    fi
-
-    # Run the post-plan script
-    chmod +x scripts/post-plan-to-pr.sh
-    ./scripts/post-plan-to-pr.sh "${_PR_NUMBER}"
-  timeout: 120s
-
 options:
   machineType: E2_HIGHCPU_8
   logging: CLOUD_LOGGING_ONLY
