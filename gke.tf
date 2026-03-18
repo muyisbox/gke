@@ -34,7 +34,7 @@ module "gke" {
       enable_gvnic       = false
       auto_repair        = true
       auto_upgrade       = true
-      service_account    = var.compute_engine_service_account
+      service_account    = ""
       preemptible        = false
       initial_node_count = 1
     },

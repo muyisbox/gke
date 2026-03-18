@@ -2,6 +2,10 @@ configs:
   cm:
     exec.enabled: true
   repositories:
+    gke-gitops-repo:
+      url: https://github.com/muyisbox/gke.git
+      name: gke-gitops
+      type: git
     istio-helm-repo:
       url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
       name: istio.io

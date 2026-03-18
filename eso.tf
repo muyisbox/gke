@@ -52,12 +52,39 @@ resource "google_secret_manager_secret_version" "argocd_cluster" {
   })
 }
 
-# ClusterSecretStore: ESO backend pointing to GCP Secret Manager via WI
-resource "kubernetes_manifest" "eso_cluster_secret_store" {
+# ESO CRDs - only the ones we need (ClusterSecretStore + ExternalSecret)
+# Version is driven by var.eso_version (must match the chart in gke-applications/gitops/external-secrets.yaml)
+data "http" "eso_crd_clustersecretstores" {
   count = terraform.workspace == "gitops" ? 1 : 0
+  url   = "https://raw.githubusercontent.com/external-secrets/external-secrets/v${var.eso_version}/config/crds/bases/external-secrets.io_clustersecretstores.yaml"
+}
 
-  manifest = {
-    apiVersion = "external-secrets.io/v1beta1"
+data "http" "eso_crd_externalsecrets" {
+  count = terraform.workspace == "gitops" ? 1 : 0
+  url   = "https://raw.githubusercontent.com/external-secrets/external-secrets/v${var.eso_version}/config/crds/bases/external-secrets.io_externalsecrets.yaml"
+}
+
+resource "kubectl_manifest" "eso_crd_clustersecretstores" {
+  count            = terraform.workspace == "gitops" ? 1 : 0
+  yaml_body        = data.http.eso_crd_clustersecretstores[0].response_body
+  server_side_apply = true
+  depends_on       = [module.gke]
+}
+
+resource "kubectl_manifest" "eso_crd_externalsecrets" {
+  count            = terraform.workspace == "gitops" ? 1 : 0
+  yaml_body        = data.http.eso_crd_externalsecrets[0].response_body
+  server_side_apply = true
+  depends_on       = [module.gke]
+}
+
+# ClusterSecretStore: ESO backend pointing to GCP Secret Manager via WI
+resource "kubectl_manifest" "eso_cluster_secret_store" {
+  count             = terraform.workspace == "gitops" ? 1 : 0
+  server_side_apply = true
+
+  yaml_body = yamlencode({
+    apiVersion = "external-secrets.io/v1"
     kind       = "ClusterSecretStore"
     metadata = {
       name = "gcp-secret-manager"
@@ -80,17 +107,21 @@ resource "kubernetes_manifest" "eso_cluster_secret_store" {
         }
       }
     }
-  }
+  })
 
-  depends_on = [module.argocd]
+  depends_on = [
+    kubectl_manifest.eso_crd_clustersecretstores,
+    module.argocd
+  ]
 }
 
 # ExternalSecrets: one per remote cluster, creates ArgoCD cluster secrets
-resource "kubernetes_manifest" "argocd_external_secret" {
-  for_each = local.eso_managed_clusters
+resource "kubectl_manifest" "argocd_external_secret" {
+  for_each          = local.eso_managed_clusters
+  server_side_apply = true
 
-  manifest = {
-    apiVersion = "external-secrets.io/v1beta1"
+  yaml_body = yamlencode({
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "${each.key}-cluster-secret"
@@ -114,9 +145,7 @@ resource "kubernetes_manifest" "argocd_external_secret" {
           data = {
             name   = "{{ .name }}"
             server = "https://{{ .endpoint }}"
-            config = <<-EOT
-              {"execProviderConfig":{"command":"argocd-k8s-auth","args":["gcp"],"apiVersion":"client.authentication.k8s.io/v1beta1"},"tlsClientConfig":{"insecure":false,"caData":"{{ .ca_cert }}"}}
-            EOT
+            config = "{\"execProviderConfig\":{\"command\":\"argocd-k8s-auth\",\"args\":[\"gcp\"],\"apiVersion\":\"client.authentication.k8s.io/v1beta1\"},\"tlsClientConfig\":{\"insecure\":false,\"caData\":\"{{ .ca_cert }}\"}}"
           }
         }
       }
@@ -126,7 +155,7 @@ resource "kubernetes_manifest" "argocd_external_secret" {
         }
       }]
     }
-  }
+  })
 
-  depends_on = [kubernetes_manifest.eso_cluster_secret_store]
+  depends_on = [kubectl_manifest.eso_cluster_secret_store]
 }
