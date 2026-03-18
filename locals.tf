@@ -9,7 +9,9 @@ locals {
   # Shared network name - gitops creates, others reference via data source
   shared_network_name = terraform.workspace == "gitops" ? module.shared-network[0].network_name : data.google_compute_network.shared_network[0].name
 
-  # Base app definitions (chart info only, no project/destination)
+  # Base app definitions
+  # Each app has an optional `clusters` field to control which clusters it deploys to.
+  # Omit `clusters` to deploy to all clusters (gitops, dev, staging).
   apps = {
     # --- Monitoring ---
     prometheus = {
@@ -140,6 +142,7 @@ locals {
       repoURL        = "https://basic-techno.github.io/helm-charts/"
       targetRevision = "0.1.0"
       namespace      = "bookinfo"
+      clusters       = ["dev"]
       values         = indent(8, yamlencode(file("${path.module}/templates/values-bookinfo.yaml")))
     }
   }
@@ -163,13 +166,14 @@ locals {
     }
   } : {}
 
-  # Per-cluster apps: each app deployed to each cluster with correct project/destination
+  # Per-cluster apps: deploy each app only to clusters listed in its `clusters` field.
+  # If `clusters` is omitted, the app deploys to all clusters.
   all_cluster_apps = terraform.workspace == "gitops" ? merge([
     for cluster_name, cluster in local.argocd_clusters : {
       for app_key, app in local.apps : "${cluster_name}-${app_key}" => merge(app, {
         project     = "project-${cluster_name}"
         dest_server = "https://${cluster.endpoint}"
-      })
+      }) if contains(lookup(app, "clusters", ["gitops", "dev", "staging"]), cluster_name)
     }
   ]...) : {}
 
