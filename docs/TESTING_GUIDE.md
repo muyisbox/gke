@@ -45,24 +45,24 @@ The local testing script validates the Python code and YAML generation without u
 #### **Basic Local Validation**
 ```bash
 # Test with default settings
-./test_cicd_locally.sh
+./scripts/test-cicd-locally.sh
 
 # Test with custom workspaces
-./test_cicd_locally.sh --workspaces "prod,staging,dev" --tf-version "1.5.0"
+./scripts/test-cicd-locally.sh --workspaces "prod,staging,dev" --tf-version "1.5.0"
 
 # Dry run (check prerequisites only)
-./test_cicd_locally.sh --mode dry-run
+./scripts/test-cicd-locally.sh --mode dry-run
 ```
 
 #### **Local Test Options**
 ```bash
 # Available test modes
-./test_cicd_locally.sh --mode validation    # Full validation suite (default)
-./test_cicd_locally.sh --mode generation    # Test YAML generation only
-./test_cicd_locally.sh --mode dry-run       # Check prerequisites only
+./scripts/test-cicd-locally.sh --mode validation    # Full validation suite (default)
+./scripts/test-cicd-locally.sh --mode generation    # Test YAML generation only
+./scripts/test-cicd-locally.sh --mode dry-run       # Check prerequisites only
 
 # Custom parameters
-./test_cicd_locally.sh \
+./scripts/test-cicd-locally.sh \
     --project-id "my-project" \
     --workspaces "gitops,dev,staging" \
     --tf-version "1.11"
@@ -83,28 +83,28 @@ The gcloud testing script validates the pipeline using actual Google Cloud Build
 #### **Basic Cloud Build Validation**
 ```bash
 # Dry run validation (no actual build)
-./test_cicd_gcloud.sh
+./scripts/test-cicd-gcloud.sh
 
 # Submit test build
-./test_cicd_gcloud.sh --type submit
+./scripts/test-cicd-gcloud.sh --type submit
 
 # Full test suite with monitoring
-./test_cicd_gcloud.sh --type full
+./scripts/test-cicd-gcloud.sh --type full
 ```
 
 #### **Cloud Build Test Options**
 ```bash
 # Available test types
-./test_cicd_gcloud.sh --type dry-run    # Validate config without building
-./test_cicd_gcloud.sh --type submit     # Submit actual test build
-./test_cicd_gcloud.sh --type monitor    # Monitor specific build
-./test_cicd_gcloud.sh --type full       # Complete test with monitoring
+./scripts/test-cicd-gcloud.sh --type dry-run    # Validate config without building
+./scripts/test-cicd-gcloud.sh --type submit     # Submit actual test build
+./scripts/test-cicd-gcloud.sh --type monitor    # Monitor specific build
+./scripts/test-cicd-gcloud.sh --type full       # Complete test with monitoring
 
 # Monitor specific build
-./test_cicd_gcloud.sh --monitor "12345-abcd-6789"
+./scripts/test-cicd-gcloud.sh --monitor "12345-abcd-6789"
 
 # Custom parameters
-./test_cicd_gcloud.sh \
+./scripts/test-cicd-gcloud.sh \
     --project-id "cluster-dreams" \
     --region "us-central1" \
     --workspaces "gitops,dev" \
@@ -126,10 +126,10 @@ Test the typical development workflow with pull requests:
 
 ```bash
 # Local validation first
-./test_cicd_locally.sh --mode validation
+./scripts/test-cicd-locally.sh --mode validation
 
 # If local tests pass, test cloud integration
-./test_cicd_gcloud.sh --type dry-run
+./scripts/test-cicd-gcloud.sh --type dry-run
 ```
 
 ### **Scenario 2: Production Deployment**
@@ -137,10 +137,10 @@ Test production-ready configuration:
 
 ```bash
 # Test with production workspaces
-./test_cicd_locally.sh --workspaces "prod,staging" --tf-version "1.11"
+./scripts/test-cicd-locally.sh --workspaces "prod,staging" --tf-version "1.11"
 
 # Submit production test build
-./test_cicd_gcloud.sh --workspaces "prod,staging" --type submit
+./scripts/test-cicd-gcloud.sh --workspaces "prod,staging" --type submit
 ```
 
 ### **Scenario 3: Multi-environment Testing**
@@ -148,10 +148,10 @@ Test with multiple environments:
 
 ```bash
 # Test all environments
-./test_cicd_locally.sh --workspaces "dev,staging,prod,gitops"
+./scripts/test-cicd-locally.sh --workspaces "dev,staging,prod,gitops"
 
 # Cloud build test with monitoring
-./test_cicd_gcloud.sh --workspaces "dev,staging,prod,gitops" --type full
+./scripts/test-cicd-gcloud.sh --workspaces "dev,staging,prod,gitops" --type full
 ```
 
 ### **Scenario 4: Error Handling Validation**
@@ -159,10 +159,10 @@ Test error conditions:
 
 ```bash
 # Test with invalid workspace names
-./test_cicd_locally.sh --workspaces "invalid workspace name"
+./scripts/test-cicd-locally.sh --workspaces "invalid workspace name"
 
 # Test with missing project
-./test_cicd_gcloud.sh --project-id "non-existent-project" --type dry-run
+./scripts/test-cicd-gcloud.sh --project-id "non-existent-project" --type dry-run
 ```
 
 ## 🔍 **Manual Testing Commands**
@@ -201,10 +201,10 @@ gcloud builds log BUILD_ID --region=us-central1
 ### **Measure Build Performance**
 ```bash
 # Time the local generation
-time ./test_cicd_locally.sh --mode generation
+time ./scripts/test-cicd-locally.sh --mode generation
 
 # Monitor cloud build times
-./test_cicd_gcloud.sh --type full | grep -E "(elapsed|duration)"
+./scripts/test-cicd-gcloud.sh --type full | grep -E "(elapsed|duration)"
 ```
 
 ### **Resource Usage Testing**
@@ -235,7 +235,7 @@ brew install --cask google-cloud-sdk
 #### **Permission Errors**
 ```bash
 # Make scripts executable
-chmod +x test_cicd_locally.sh test_cicd_gcloud.sh
+chmod +x scripts/test-cicd-locally.sh scripts/test-cicd-gcloud.sh
 
 # Fix Python import issues
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
@@ -324,23 +324,23 @@ gcloud builds describe BUILD_ID --region=us-central1
 ### **Daily Testing**
 ```bash
 # Quick validation
-./test_cicd_locally.sh --mode dry-run
+./scripts/test-cicd-locally.sh --mode dry-run
 ```
 
 ### **Weekly Testing**
 ```bash
 # Full local validation
-./test_cicd_locally.sh
+./scripts/test-cicd-locally.sh
 
 # Cloud integration test
-./test_cicd_gcloud.sh --type dry-run
+./scripts/test-cicd-gcloud.sh --type dry-run
 ```
 
 ### **Pre-deployment Testing**
 ```bash
 # Comprehensive test suite
-./test_cicd_locally.sh --mode validation
-./test_cicd_gcloud.sh --type full
+./scripts/test-cicd-locally.sh --mode validation
+./scripts/test-cicd-gcloud.sh --type full
 ```
 
 ## 📊 **Test Results Interpretation**
@@ -374,7 +374,7 @@ gcloud builds describe BUILD_ID --region=us-central1
 
 ## 📚 **Additional Resources**
 
-- [Local Testing Script](./test_cicd_locally.sh)
-- [gcloud Testing Script](./test_cicd_gcloud.sh)
+- [Local Testing Script](../scripts/test-cicd-locally.sh)
+- [gcloud Testing Script](../scripts/test-cicd-gcloud.sh)
 - [CI/CD Improvements Documentation](./CICD_IMPROVEMENTS.md)
 - [Google Cloud Build Documentation](https://cloud.google.com/build/docs)

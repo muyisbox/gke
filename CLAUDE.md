@@ -4,11 +4,11 @@ This file contains important context and instructions for Claude Code sessions w
 
 ## 🚀 Available GCloud Aliases
 
-**IMPORTANT**: This project has custom gcloud aliases defined in `gcloud-aliases.sh`.
+**IMPORTANT**: This project has custom gcloud aliases defined in `scripts/gcloud-aliases.sh`.
 
 ### To Load Aliases in New Sessions:
 ```bash
-source gcloud-aliases.sh
+source scripts/gcloud-aliases.sh
 ```
 
 ### Key Aliases to Use:
@@ -46,21 +46,21 @@ source gcloud-aliases.sh
 
 **Always test changes locally before committing:**
 
-1. Load aliases: `source gcloud-aliases.sh`
+1. Load aliases: `source scripts/gcloud-aliases.sh`
 2. Run health check: `gcloud-health-check`
 3. Test pipeline: `gcb-test` or `gcb-quick-test`
 4. Monitor: `gcb-logs BUILD_ID` or use `gcb-stream`
 
 ### 📁 Important Files
 
-- `cloudbuild.yaml` - Main production pipeline (runs on merge to main)
-- `cloudbuild-plan.yaml` - PR plan pipeline (runs on PRs)
-- `cloudbuild-test.yaml` - Test/development pipeline
-- `cloudbuild-destroy.yaml` - Scheduled destroy (2 AM EST)
-- `cloudbuild-create.yaml` - Scheduled recreate (10 AM EST)
-- `gcloud-aliases.sh` - All custom aliases
-- `PR-WORKFLOW.md` - Pull request workflow documentation
-- `SCHEDULED-DESTROY.md` - Cost optimization documentation
+- `cicd/cloudbuild.yaml` - Main production pipeline (runs on merge to main)
+- `cicd/cloudbuild-plan.yaml` - PR plan pipeline (runs on PRs)
+- `cicd/cloudbuild-test.yaml` - Test/development pipeline
+- `cicd/cloudbuild-destroy.yaml` - Scheduled destroy (2 AM EST)
+- `cicd/cloudbuild-create.yaml` - Scheduled recreate (10 AM EST)
+- `scripts/gcloud-aliases.sh` - All custom aliases
+- `docs/PR-WORKFLOW.md` - Pull request workflow documentation
+- `docs/SCHEDULED-DESTROY.md` - Cost optimization documentation
 - This file (`CLAUDE.md`) - Instructions for Claude
 
 ### 🔧 Project Context
@@ -85,7 +85,7 @@ The pipeline includes:
 2. **Test locally** before suggesting commits
 3. **Use health check** to verify setup
 4. **Reference this file** for project context
-5. **Test incrementally** with cloudbuild-test.yaml
+5. **Test incrementally** with cicd/cloudbuild-test.yaml
 6. **Use PR workflow** - Never push directly to main
 
 ### 🔄 PR Workflow
@@ -96,7 +96,7 @@ This project uses automated PR-based workflow:
 2. **Review plan** → Check Cloud Build logs for terraform plan output
 3. **Merge PR** → Triggers `cloudbuild.yaml` → Actually applies changes
 
-**See [PR-WORKFLOW.md](./PR-WORKFLOW.md) for full details**
+**See [docs/PR-WORKFLOW.md](./docs/PR-WORKFLOW.md) for full details**
 
 ### 🚨 Common Issues & Solutions
 
@@ -115,7 +115,7 @@ This project uses automated PR-based workflow:
 
 ```bash
 # Essential setup commands
-source gcloud-aliases.sh
+source scripts/gcloud-aliases.sh
 gcloud-health-check
 gcb-quick-test
 

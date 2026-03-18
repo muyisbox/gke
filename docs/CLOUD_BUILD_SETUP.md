@@ -16,7 +16,7 @@ does not have secretmanager.versions.access permissions
 
 ### 2. Cloud Build Configuration (READY)
 **Current Status**:
-- ✅ **File**: `cloudbuild.yaml` (standard filename for auto-detection)
+- ✅ **File**: `cicd/cloudbuild.yaml`
 - ✅ **Secret Access**: Properly configured with `secretEnv` fields
 - ✅ **Steps**: 14 optimized build steps across 3 workspaces
 - ✅ **Permissions**: All required IAM roles assigned
@@ -49,7 +49,7 @@ The Cloud Build should now run successfully when triggered via:
 
 ```bash
 # Test Cloud Build can access the secret
-gcloud builds submit --config=cloudbuild.yaml --no-source --substitutions="_WORKSPACES=gitops,dev,staging"
+gcloud builds submit --config=cicd/cloudbuild.yaml --no-source --substitutions="_WORKSPACES=gitops,dev,staging"
 
 # Check build status  
 gcloud builds list --limit=5

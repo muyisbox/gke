@@ -18,17 +18,17 @@ graph LR
 
 | Event | Trigger | Action | Config File |
 |-------|---------|--------|-------------|
-| **PR opened/updated** | `pr-plan-all-workspaces` | Run `terraform plan` only | `cloudbuild-plan.yaml` |
-| **Merged to main** | `main-apply-all-workspaces` | Run `terraform apply` | `cloudbuild.yaml` |
-| **Feature branch push** | `feature-branch-test` | Run validation tests | `cloudbuild-test.yaml` |
+| **PR opened/updated** | `pr-plan-all-workspaces` | Run `terraform plan` only | `cicd/cloudbuild-plan.yaml` |
+| **Merged to main** | `main-apply-all-workspaces` | Run `terraform apply` | `cicd/cloudbuild.yaml` |
+| **Feature branch push** | `feature-branch-test` | Run validation tests | `cicd/cloudbuild-test.yaml` |
 
 ## 🚀 Quick Setup
 
 ### 1. Run Setup Script
 
 ```bash
-chmod +x setup-pr-workflow.sh
-./setup-pr-workflow.sh cluster-dreams
+chmod +x scripts/setup-pr-workflow.sh
+./scripts/setup-pr-workflow.sh cluster-dreams
 ```
 
 This creates three Cloud Build triggers:
@@ -274,7 +274,7 @@ gcloud builds log $BUILD_ID | grep -A 20 "post-pr-comment"
 
 Filter which workspaces get planned on PRs:
 
-Edit `cloudbuild-plan.yaml`:
+Edit `cicd/cloudbuild-plan.yaml`:
 
 ```yaml
 # Only plan changed workspaces
@@ -339,11 +339,11 @@ substitutions:
 
 ## 📚 Related Documentation
 
-- [CLAUDE.md](./CLAUDE.md) - GCloud aliases and project context
+- [CLAUDE.md](../CLAUDE.md) - GCloud aliases and project context
 - [SCHEDULED-DESTROY.md](./SCHEDULED-DESTROY.md) - Automated cost savings
-- [cloudbuild.yaml](./cloudbuild.yaml) - Main apply pipeline
-- [cloudbuild-plan.yaml](./cloudbuild-plan.yaml) - PR plan pipeline
-- [cloudbuild-test.yaml](./cloudbuild-test.yaml) - Validation tests
+- [cloudbuild.yaml](../cicd/cloudbuild.yaml) - Main apply pipeline
+- [cloudbuild-plan.yaml](../cicd/cloudbuild-plan.yaml) - PR plan pipeline
+- [cloudbuild-test.yaml](../cicd/cloudbuild-test.yaml) - Validation tests
 
 ## 🤝 Contributing
 
@@ -359,7 +359,7 @@ substitutions:
 
 ### Pipeline Development Best Practices
 
-- ✅ Test changes with `cloudbuild-test.yaml` first
+- ✅ Test changes with `cicd/cloudbuild-test.yaml` first
 - ✅ Use `_SUBSTITUTIONS` for configurable values
 - ✅ Add descriptive step IDs and names
 - ✅ Include timeout values for all steps

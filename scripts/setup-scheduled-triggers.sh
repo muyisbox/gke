@@ -25,7 +25,7 @@ gcloud builds triggers create manual \
   --project="$PROJECT_ID" \
   --region="$REGION" \
   --name="scheduled-destroy-dev-staging" \
-  --build-config="cloudbuild-destroy.yaml" \
+  --build-config="cicd/cloudbuild-destroy.yaml" \
   --repo="https://github.com/$REPO_NAME" \
   --repo-type="GITHUB" \
   --branch="main" \
@@ -55,7 +55,7 @@ gcloud builds triggers create manual \
   --project="$PROJECT_ID" \
   --region="$REGION" \
   --name="scheduled-create-dev-staging" \
-  --build-config="cloudbuild-create.yaml" \
+  --build-config="cicd/cloudbuild-create.yaml" \
   --repo="https://github.com/$REPO_NAME" \
   --repo-type="GITHUB" \
   --branch="main" \
