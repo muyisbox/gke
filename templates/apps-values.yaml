@@ -37,9 +37,6 @@ applicationsets:
           syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
-          managedNamespaceMetadata:
-            labels:
-              istio.io/rev: stable
     syncPolicy:
       applicationsSync: sync
     goTemplate: true
