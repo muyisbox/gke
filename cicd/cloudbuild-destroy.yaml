@@ -15,13 +15,13 @@ steps:
 
 # Terraform Init (shared)
 - id: terraform-init
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   args:
   - -c
   - |
     set -e
-    terraform init -backend-config="prefix=terraform/state"
+    terraform init -upgrade -backend-config="prefix=terraform/state"
   timeout: 300s
 
 ###################
@@ -29,7 +29,7 @@ steps:
 ###################
 
 - id: destroy-dev
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - terraform-init
@@ -73,7 +73,7 @@ steps:
 ###################
 
 - id: destroy-staging
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - destroy-dev

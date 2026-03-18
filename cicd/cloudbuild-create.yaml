@@ -1,6 +1,6 @@
 steps:
 # Environment Info
-- name: alpine:3.18
+- name: alpine:latest
   id: environment-info
   entrypoint: /bin/sh
   args:
@@ -15,13 +15,13 @@ steps:
 
 # Terraform Init (shared)
 - id: terraform-init
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   args:
   - -c
   - |
     set -e
-    terraform init -backend-config="prefix=terraform/state"
+    terraform init -upgrade -backend-config="prefix=terraform/state"
   timeout: 300s
 
 ###################
@@ -29,7 +29,7 @@ steps:
 ###################
 
 - id: setup-dev
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - terraform-init
@@ -66,7 +66,7 @@ steps:
   timeout: 300s
 
 - id: plan-dev
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - setup-dev
@@ -88,7 +88,7 @@ steps:
   timeout: 600s
 
 - id: apply-dev
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - plan-dev
@@ -128,7 +128,7 @@ steps:
 ###################
 
 - id: setup-staging
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - apply-dev
@@ -165,7 +165,7 @@ steps:
   timeout: 300s
 
 - id: plan-staging
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - setup-staging
@@ -187,7 +187,7 @@ steps:
   timeout: 600s
 
 - id: apply-staging
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - plan-staging
@@ -223,7 +223,7 @@ steps:
   timeout: 1800s
 
 # Summary
-- name: alpine:3.18
+- name: alpine:latest
   id: create-summary
   entrypoint: /bin/sh
   args:
