@@ -44,9 +44,9 @@ applicationsets:
       applicationsSync: sync
     goTemplate: true
     templatePatch: |
+      {{- if .helm }}
       spec:
         source:
-          {{- if .helm }}
           helm:
             releaseName: '{{.name}}'
             {{- if .helm.values }}
@@ -59,7 +59,7 @@ applicationsets:
               - {{ $f }}
               {{- end }}
             {{- end }}
-          {{- end }}
+      {{- end }}
   %{~ endfor ~}
 
 projects:
