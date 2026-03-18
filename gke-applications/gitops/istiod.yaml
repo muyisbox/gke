@@ -1,0 +1,15 @@
+name: istiod
+chart: istiod
+repoURL: https://istio-release.storage.googleapis.com/charts
+targetRevision: "1.29.*"
+namespace: istio-system
+cluster_env: gitops
+helm:
+  values:
+    pilot:
+      autoscaleEnabled: true
+      autoscaleMin: 2
+      autoscaleMax: 4
+    revision: "1-21"
+    revisionTags:
+      - stable

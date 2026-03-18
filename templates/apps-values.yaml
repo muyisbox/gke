@@ -1,48 +1,84 @@
-applications: 
-  %{~ for k, app in apps ~}
-  ${k}:
+applicationsets:
+  %{~ for cluster_name, cluster in clusters ~}
+  ${cluster_name}-apps:
     namespace: argocd
-    finalizers:
-    - resources-finalizer.argocd.argoproj.io
-    project: ${app.project}
-    source:
-      repoURL: ${app.repoURL}
-      targetRevision: ${app.targetRevision}
-      chart: ${app.chart}
-      helm:
-        releaseName: ${app.name}
-        values: ${app.values}
-    destination:
-      server: https://kubernetes.default.svc
-      namespace: ${app.namespace}
+    generators:
+    - git:
+        repoURL: https://github.com/muyisbox/gke.git
+        revision: master
+        files:
+        - path: gke-applications/${cluster_name}/*.yaml
+    template:
+      metadata:
+        name: '{{.name}}-${cluster_name}'
+        namespace: argocd
+        labels:
+          app.kubernetes.io/name: '{{.name}}'
+          app.kubernetes.io/managed-by: argocd
+          dynamou.io/cluster: ${cluster_name}
+          dynamou.io/env: '{{.cluster_env}}'
+        finalizers:
+        - resources-finalizer.argocd.argoproj.io
+      spec:
+        project: project-${cluster_name}
+        source:
+          repoURL: '{{.repoURL}}'
+          targetRevision: '{{.targetRevision}}'
+          chart: '{{.chart}}'
+          helm:
+            releaseName: '{{.name}}'
+        destination:
+          name: ${cluster_name}-cluster
+          namespace: '{{.namespace}}'
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          managedNamespaceMetadata:
+            labels:
+              istio.io/rev: stable
     syncPolicy:
-      managedNamespaceMetadata:
-        labels: # The labels to set on the application namespace
-          istio.io/rev: stable
-      automated:
-        prune: true
-        selfHeal: true
-      syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
+      applicationsSync: sync
+    goTemplate: true
+    templatePatch: |
+      spec:
+        source:
+          {{- if .helm }}
+          helm:
+            releaseName: '{{.name}}'
+            {{- if .helm.values }}
+            valuesObject:
+              {{- toYaml .helm.values | nindent 14 }}
+            {{- end }}
+            {{- if .helm.valueFiles }}
+            valueFiles:
+              {{- range $f := .helm.valueFiles }}
+              - {{ $f }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
   %{~ endfor ~}
-projects: 
-  boeing:
+
+projects:
+  %{~ for cluster_name, cluster in clusters ~}
+  project-${cluster_name}:
     namespace: argocd
     finalizers:
     - resources-finalizer.argocd.argoproj.io
-    description: A Sample Project to Deploy applications into Boing Clusters
+    description: Project for ${cluster_name} cluster
     sourceRepos:
     - '*'
     destinations:
-    - name: '*'
+    - name: ${cluster_name}-cluster
       namespace: '*'
-      server: https://kubernetes.default.svc
+      server: https://${cluster.endpoint}
     namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
     clusterResourceWhitelist:
     - group: '*'
       kind: '*'
-
-
+  %{~ endfor ~}

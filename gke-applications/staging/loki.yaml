@@ -1,0 +1,43 @@
+name: loki
+chart: loki
+repoURL: https://grafana.github.io/helm-charts
+targetRevision: "6.54.0"
+namespace: logging
+cluster_env: staging
+helm:
+  values:
+    deploymentMode: SimpleScalable
+    loki:
+      auth_enabled: false
+      commonConfig:
+        replication_factor: 1
+      storage:
+        type: filesystem
+      schemaConfig:
+        configs:
+          - from: "2024-01-01"
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+    singleBinary:
+      replicas: 0
+    read:
+      replicas: 1
+    write:
+      replicas: 1
+    backend:
+      replicas: 1
+    gateway:
+      replicas: 1
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
+    monitoring:
+      serviceMonitor:
+        enabled: true
+        labels:
+          release: prometheus-monitoring

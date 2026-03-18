@@ -55,6 +55,12 @@ variable "cluster_autoscaling" {
 
 
 
+variable "eso_version" {
+  description = "External Secrets Operator version - used for CRD installation and chart deployment"
+  type        = string
+  default     = "2.1.0"
+}
+
 variable "argocd" {
   description = "argocd configuration values"
   type = object({

@@ -1,0 +1,20 @@
+name: reloader
+chart: reloader
+repoURL: https://stakater.github.io/stakater-charts
+targetRevision: "2.2.9"
+namespace: reloader
+cluster_env: staging
+helm:
+  values:
+    watchGlobally: true
+    readOnlyRootFilesystem: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: prometheus-monitoring
