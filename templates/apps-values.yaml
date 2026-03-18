@@ -1,4 +1,4 @@
-applications: 
+applications:
   %{~ for k, app in apps ~}
   ${k}:
     namespace: argocd
@@ -13,11 +13,11 @@ applications:
         releaseName: ${app.name}
         values: ${app.values}
     destination:
-      server: https://kubernetes.default.svc
+      server: ${app.dest_server}
       namespace: ${app.namespace}
     syncPolicy:
       managedNamespaceMetadata:
-        labels: # The labels to set on the application namespace
+        labels:
           istio.io/rev: stable
       automated:
         prune: true
@@ -26,23 +26,23 @@ applications:
       - CreateNamespace=true
       - ServerSideApply=true
   %{~ endfor ~}
-projects: 
-  boeing:
+projects:
+  %{~ for cluster_name, cluster in clusters ~}
+  project-${cluster_name}:
     namespace: argocd
     finalizers:
     - resources-finalizer.argocd.argoproj.io
-    description: A Sample Project to Deploy applications into Boing Clusters
+    description: Project for ${cluster_name} cluster
     sourceRepos:
     - '*'
     destinations:
-    - name: '*'
+    - name: ${cluster_name}-cluster
       namespace: '*'
-      server: https://kubernetes.default.svc
+      server: https://${cluster.endpoint}
     namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
     clusterResourceWhitelist:
     - group: '*'
       kind: '*'
-
-
+  %{~ endfor ~}

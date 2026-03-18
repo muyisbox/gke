@@ -8,6 +8,8 @@ locals {
   }
   # Shared network name - gitops creates, others reference via data source
   shared_network_name = terraform.workspace == "gitops" ? module.shared-network[0].network_name : data.google_compute_network.shared_network[0].name
+
+  # Base app definitions (chart info only, no project/destination)
   apps = {
     # --- Monitoring ---
     prometheus = {
@@ -15,7 +17,6 @@ locals {
       chart          = "kube-prometheus-stack"
       repoURL        = "https://prometheus-community.github.io/helm-charts"
       targetRevision = "82.10.3"
-      project        = "boeing"
       namespace      = "monitoring"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-prometheus.yaml")))
     }
@@ -24,7 +25,6 @@ locals {
       chart          = "loki"
       repoURL        = "https://grafana.github.io/helm-charts"
       targetRevision = "6.54.0"
-      project        = "boeing"
       namespace      = "logging"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-loki.yaml")))
     }
@@ -33,7 +33,6 @@ locals {
       chart          = "kiali-server"
       repoURL        = "https://kiali.org/helm-charts"
       targetRevision = "2.23.0"
-      project        = "boeing"
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-kiali.yaml")))
     }
@@ -44,7 +43,6 @@ locals {
       chart          = "base"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
       targetRevision = "1.29.*"
-      project        = "boeing"
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-base.yaml")))
     }
@@ -53,7 +51,6 @@ locals {
       chart          = "istiod"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
       targetRevision = "1.29.*"
-      project        = "boeing"
       namespace      = "istio-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-istiod.yaml")))
     }
@@ -62,7 +59,6 @@ locals {
       chart          = "gateway"
       repoURL        = "https://istio-release.storage.googleapis.com/charts"
       targetRevision = "1.29.*"
-      project        = "boeing"
       namespace      = "istio-gateways"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-gateway.yaml")))
     }
@@ -73,7 +69,6 @@ locals {
       chart          = "cert-manager"
       repoURL        = "https://charts.jetstack.io"
       targetRevision = "1.20.0"
-      project        = "boeing"
       namespace      = "cert-manager"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-certmanager.yaml")))
     }
@@ -84,7 +79,6 @@ locals {
       chart          = "vpa"
       repoURL        = "https://charts.fairwinds.com/stable"
       targetRevision = "4.10.1"
-      project        = "boeing"
       namespace      = "vpa"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-vpa.yaml")))
     }
@@ -95,7 +89,6 @@ locals {
       chart          = "argo-rollouts"
       repoURL        = "https://argoproj.github.io/argo-helm"
       targetRevision = "2.40.6"
-      project        = "boeing"
       namespace      = "argo-rollouts"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-argo-rollouts.yaml")))
     }
@@ -106,7 +99,6 @@ locals {
       chart          = "external-secrets"
       repoURL        = "https://charts.external-secrets.io"
       targetRevision = "2.1.0"
-      project        = "boeing"
       namespace      = "external-secrets"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-external-secrets.yaml")))
     }
@@ -117,7 +109,6 @@ locals {
       chart          = "external-dns"
       repoURL        = "https://kubernetes-sigs.github.io/external-dns"
       targetRevision = "1.20.0"
-      project        = "boeing"
       namespace      = "external-dns"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-external-dns.yaml")))
     }
@@ -128,7 +119,6 @@ locals {
       chart          = "metrics-server"
       repoURL        = "https://kubernetes-sigs.github.io/metrics-server"
       targetRevision = "3.13.0"
-      project        = "boeing"
       namespace      = "kube-system"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-metrics-server.yaml")))
     }
@@ -139,7 +129,6 @@ locals {
       chart          = "reloader"
       repoURL        = "https://stakater.github.io/stakater-charts"
       targetRevision = "2.2.9"
-      project        = "boeing"
       namespace      = "reloader"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-reloader.yaml")))
     }
@@ -150,11 +139,40 @@ locals {
       chart          = "bookinfo"
       repoURL        = "https://basic-techno.github.io/helm-charts/"
       targetRevision = "0.1.0"
-      project        = "boeing"
       namespace      = "bookinfo"
       values         = indent(8, yamlencode(file("${path.module}/templates/values-bookinfo.yaml")))
     }
   }
+
+  # Cluster map for ArgoCD - all 3 clusters registered via Workload Identity
+  argocd_clusters = terraform.workspace == "gitops" ? {
+    gitops = {
+      name     = "gitops-cluster"
+      endpoint = data.google_container_cluster.gitops[0].endpoint
+      ca_cert  = data.google_container_cluster.gitops[0].master_auth[0].cluster_ca_certificate
+    }
+    dev = {
+      name     = "dev-cluster"
+      endpoint = data.google_container_cluster.dev[0].endpoint
+      ca_cert  = data.google_container_cluster.dev[0].master_auth[0].cluster_ca_certificate
+    }
+    staging = {
+      name     = "staging-cluster"
+      endpoint = data.google_container_cluster.staging[0].endpoint
+      ca_cert  = data.google_container_cluster.staging[0].master_auth[0].cluster_ca_certificate
+    }
+  } : {}
+
+  # Per-cluster apps: each app deployed to each cluster with correct project/destination
+  all_cluster_apps = terraform.workspace == "gitops" ? merge([
+    for cluster_name, cluster in local.argocd_clusters : {
+      for app_key, app in local.apps : "${cluster_name}-${app_key}" => merge(app, {
+        project     = "project-${cluster_name}"
+        dest_server = "https://${cluster.endpoint}"
+      })
+    }
+  ]...) : {}
+
   charts = {
     argocd = {
       namespace = var.argocd.namespace
@@ -169,89 +187,7 @@ locals {
   }
   argocd-values = file("${path.module}/templates/argocd-values.yaml")
   apps-values = templatefile("${path.module}/templates/apps-values.yaml", {
-    apps = local.apps
-  })
-
-}
-
-
-locals {
-  # Assuming var.apps is a map of objects where each object has properties like
-  # project, repoURL, targetRevision, chart, name, values, and namespace
-  argo_applications = yamlencode({
-    applications = { for k, app in local.apps : k => {
-      namespace  = "argocd"
-      finalizers = ["resources-finalizer.argocd.argoproj.io"]
-      project    = app.project
-      source = {
-        repoURL        = app.repoURL
-        targetRevision = app.targetRevision
-        chart          = app.chart
-        helm = {
-          releaseName = app.name
-          values      = app.values
-        }
-      }
-      destination = {
-        server    = "https://kubernetes.default.svc"
-        namespace = app.namespace
-      }
-      syncPolicy = {
-        managedNamespaceMetadata = {
-          labels = {
-            "istio.io/rev" = "stable"
-          }
-        }
-        automated = {
-          prune    = true
-          selfHeal = true
-        }
-        syncOptions = ["CreateNamespace=true", "ServerSideApply=true"]
-      }
-      }
-    }
-  })
-  app_project = yamlencode({
-    projects = {
-      boeing = {
-        namespace   = "argocd"
-        finalizers  = ["resources-finalizer.argocd.argoproj.io"]
-        description = "A Sample Project to Deploy applications into Boing Clusters"
-        sourceRepos = [
-          "https://prometheus-community.github.io/helm-charts",
-          "https://istio-release.storage.googleapis.com/charts",
-          "https://charts.fairwinds.com/stable",
-          "https://basic-techno.github.io/helm-charts/",
-          "https://charts.jetstack.io",
-          "https://grafana.github.io/helm-charts",
-          "https://kiali.org/helm-charts",
-          "https://argoproj.github.io/argo-helm",
-          "https://charts.external-secrets.io",
-          "https://kubernetes-sigs.github.io/external-dns",
-          "https://kubernetes-sigs.github.io/metrics-server",
-          "https://stakater.github.io/stakater-charts",
-        ]
-        destinations = [
-          {
-            name      = "*"
-            namespace = "*"
-            server    = "https://kubernetes.default.svc"
-          }
-        ]
-        namespaceResourceWhitelist = [
-          {
-            group = "*"
-            kind  = "*"
-          }
-        ]
-        clusterResourceWhitelist = [
-          {
-            group = "*"
-            kind  = "*"
-          }
-        ]
-      },
-    }
+    apps     = local.all_cluster_apps
+    clusters = local.argocd_clusters
   })
 }
-

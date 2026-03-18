@@ -1,11 +1,7 @@
-# global:
-  # image:
-  #   # -- If defined, a repository applied to all Argo CD deployments
-  #   repository: quay.io/argoproj/argocd
 configs:
   cm:
     exec.enabled: true
-  repositories: 
+  repositories:
     istio-helm-repo:
       url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
       name: istio.io
@@ -30,13 +26,18 @@ server:
     maxReplicas: 5
     targetCPUUtilizationPercentage: 50
     targetMemoryUtilizationPercentage: 50
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: argocd-controller@cluster-dreams.iam.gserviceaccount.com
 
 redis-ha:
   enabled: true
 
 controller:
   replicas: 2
-
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: argocd-controller@cluster-dreams.iam.gserviceaccount.com
 
 repoServer:
   autoscaling:
