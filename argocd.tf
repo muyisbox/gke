@@ -36,11 +36,12 @@ resource "google_service_account" "argocd" {
   project      = var.project_id
 }
 
-# Grant container.developer so ArgoCD can manage resources on all clusters
-resource "google_project_iam_member" "argocd_container_developer" {
+# Grant container.admin so ArgoCD can fully manage K8s resources on all clusters
+# (CRDs, namespaces, ClusterRoles, etc. required for hub-spoke pattern)
+resource "google_project_iam_member" "argocd_container_admin" {
   count   = terraform.workspace == "gitops" ? 1 : 0
   project = var.project_id
-  role    = "roles/container.developer"
+  role    = "roles/container.admin"
   member  = "serviceAccount:${google_service_account.argocd[0].email}"
 }
 
@@ -84,9 +85,9 @@ data "google_container_cluster" "staging" {
   project  = var.project_id
 }
 
-# ArgoCD cluster secrets - register all 3 clusters via Workload Identity
+# ArgoCD cluster secret - gitops only (dev/staging managed by ESO)
 resource "kubernetes_secret" "argocd_cluster" {
-  for_each = local.argocd_clusters
+  for_each = terraform.workspace == "gitops" ? toset(["gitops"]) : toset([])
 
   metadata {
     name      = "${each.key}-cluster-secret"
@@ -98,7 +99,7 @@ resource "kubernetes_secret" "argocd_cluster" {
 
   data = {
     name   = "${each.key}-cluster"
-    server = "https://${each.value.endpoint}"
+    server = "https://${local.argocd_clusters[each.key].endpoint}"
     config = jsonencode({
       execProviderConfig = {
         command    = "argocd-k8s-auth"
@@ -107,7 +108,7 @@ resource "kubernetes_secret" "argocd_cluster" {
       }
       tlsClientConfig = {
         insecure = false
-        caData   = each.value.ca_cert
+        caData   = local.argocd_clusters[each.key].ca_cert
       }
     })
   }

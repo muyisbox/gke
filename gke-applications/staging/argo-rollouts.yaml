@@ -1,0 +1,6 @@
+name: argo-rollouts
+chart: argo-rollouts
+repoURL: https://argoproj.github.io/argo-helm
+targetRevision: "2.40.6"
+namespace: argo-rollouts
+cluster_env: staging

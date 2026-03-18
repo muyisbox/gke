@@ -1,31 +1,67 @@
-applications:
-  %{~ for k, app in apps ~}
-  ${k}:
+applicationsets:
+  %{~ for cluster_name, cluster in clusters ~}
+  ${cluster_name}-apps:
     namespace: argocd
-    finalizers:
-    - resources-finalizer.argocd.argoproj.io
-    project: ${app.project}
-    source:
-      repoURL: ${app.repoURL}
-      targetRevision: ${app.targetRevision}
-      chart: ${app.chart}
-      helm:
-        releaseName: ${app.name}
-        values: ${app.values}
-    destination:
-      server: ${app.dest_server}
-      namespace: ${app.namespace}
-    syncPolicy:
-      managedNamespaceMetadata:
+    generators:
+    - git:
+        repoURL: https://github.com/muyisbox/gke.git
+        revision: master
+        files:
+        - path: gke-applications/${cluster_name}/*.yaml
+    template:
+      metadata:
+        name: '{{.name}}-${cluster_name}'
+        namespace: argocd
         labels:
-          istio.io/rev: stable
-      automated:
-        prune: true
-        selfHeal: true
-      syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
+          app.kubernetes.io/name: '{{.name}}'
+          app.kubernetes.io/managed-by: argocd
+          dynamou.io/cluster: ${cluster_name}
+          dynamou.io/env: '{{.cluster_env}}'
+        finalizers:
+        - resources-finalizer.argocd.argoproj.io
+      spec:
+        project: project-${cluster_name}
+        source:
+          repoURL: '{{.repoURL}}'
+          targetRevision: '{{.targetRevision}}'
+          chart: '{{.chart}}'
+          helm:
+            releaseName: '{{.name}}'
+        destination:
+          name: ${cluster_name}-cluster
+          namespace: '{{.namespace}}'
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          managedNamespaceMetadata:
+            labels:
+              istio.io/rev: stable
+    syncPolicy:
+      applicationsSync: sync
+    goTemplate: true
+    templatePatch: |
+      spec:
+        source:
+          {{- if .helm }}
+          helm:
+            releaseName: '{{.name}}'
+            {{- if .helm.values }}
+            valuesObject:
+              {{- toYaml .helm.values | nindent 14 }}
+            {{- end }}
+            {{- if .helm.valueFiles }}
+            valueFiles:
+              {{- range $f := .helm.valueFiles }}
+              - {{ $f }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
   %{~ endfor ~}
+
 projects:
   %{~ for cluster_name, cluster in clusters ~}
   project-${cluster_name}:

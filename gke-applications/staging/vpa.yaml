@@ -1,0 +1,19 @@
+name: vpa
+chart: vpa
+repoURL: https://charts.fairwinds.com/stable
+targetRevision: "4.10.1"
+namespace: vpa
+cluster_env: staging
+helm:
+  values:
+    recommender:
+      replicaCount: 2
+    updater:
+      replicaCount: 2
+      resources:
+        limits: {}
+        requests:
+          cpu: 50m
+          memory: 500Mi
+    podLabels:
+      sidecar.istio.io/inject: "false"

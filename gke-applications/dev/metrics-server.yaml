@@ -1,0 +1,21 @@
+name: metrics-server
+chart: metrics-server
+repoURL: https://kubernetes-sigs.github.io/metrics-server
+targetRevision: "3.13.0"
+namespace: kube-system
+cluster_env: dev
+helm:
+  values:
+    replicas: 2
+    args:
+      - --kubelet-preferred-address-types=InternalIP
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring

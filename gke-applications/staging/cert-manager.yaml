@@ -1,0 +1,17 @@
+name: cert-manager
+chart: cert-manager
+repoURL: https://charts.jetstack.io
+targetRevision: "1.20.0"
+namespace: cert-manager
+cluster_env: staging
+helm:
+  values:
+    crds:
+      enabled: true
+    replicaCount: 2
+    prometheus:
+      enabled: true
+      servicemonitor:
+        enabled: true
+        labels:
+          release: prometheus-monitoring

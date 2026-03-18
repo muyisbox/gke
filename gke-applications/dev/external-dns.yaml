@@ -1,0 +1,25 @@
+name: external-dns
+chart: external-dns
+repoURL: https://kubernetes-sigs.github.io/external-dns
+targetRevision: "1.20.0"
+namespace: external-dns
+cluster_env: dev
+helm:
+  values:
+    provider:
+      name: google
+    serviceAccount:
+      create: true
+      annotations: {}
+    sources:
+      - service
+      - ingress
+      - istio-gateway
+    policy: upsert-only
+    logLevel: info
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi

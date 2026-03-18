@@ -1,0 +1,6 @@
+name: bookinfo
+chart: bookinfo
+repoURL: https://basic-techno.github.io/helm-charts/
+targetRevision: "0.1.0"
+namespace: bookinfo
+cluster_env: dev

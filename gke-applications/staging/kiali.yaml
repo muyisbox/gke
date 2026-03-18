@@ -1,0 +1,33 @@
+name: kiali-server
+chart: kiali-server
+repoURL: https://kiali.org/helm-charts
+targetRevision: "2.23.0"
+namespace: istio-system
+cluster_env: staging
+helm:
+  values:
+    istio_namespace: istio-system
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 1Gi
+    auth:
+      strategy: anonymous
+    external_services:
+      prometheus:
+        url: http://prometheus-monitoring-kube-prometheus.monitoring:9090
+      istio:
+        config_map_name: istio
+        istio_namespace: istio-system
+        istiod_deployment_name: istiod
+        istio_sidecar_injector_config_map_name: istio-sidecar-injector
+    kiali_feature_flags:
+      certificates_information_indicators:
+        enabled: true
+        secrets:
+          - cacerts
+          - istio-ca-secret
