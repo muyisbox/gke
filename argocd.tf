@@ -71,16 +71,25 @@ data "google_container_cluster" "gitops" {
   depends_on = [module.gke]
 }
 
-data "google_container_cluster" "dev" {
-  count    = terraform.workspace == "gitops" ? 1 : 0
-  name     = "dev-cluster"
-  location = var.region
-  project  = var.project_id
+# Discover which remote clusters currently exist (handles destroy/create cycle)
+# During the nightly destroy window, dev/staging won't exist - this prevents plan failures
+data "http" "gke_clusters" {
+  count = terraform.workspace == "gitops" ? 1 : 0
+  url   = "https://container.googleapis.com/v1/projects/${var.project_id}/locations/${var.region}/clusters"
+
+  request_headers = {
+    Authorization = "Bearer ${data.google_client_config.default.access_token}"
+  }
 }
 
-data "google_container_cluster" "staging" {
-  count    = terraform.workspace == "gitops" ? 1 : 0
-  name     = "staging-cluster"
+# Remote clusters - only looked up if they actually exist
+data "google_container_cluster" "remote" {
+  for_each = terraform.workspace == "gitops" ? toset([
+    for name in ["dev", "staging"] : name
+    if can(regex("\"${name}-cluster\"", try(data.http.gke_clusters[0].response_body, "")))
+  ]) : toset([])
+
+  name     = "${each.key}-cluster"
   location = var.region
   project  = var.project_id
 }

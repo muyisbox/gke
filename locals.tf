@@ -9,24 +9,23 @@ locals {
   # Shared network name - gitops creates, others reference via data source
   shared_network_name = terraform.workspace == "gitops" ? module.shared-network[0].network_name : data.google_compute_network.shared_network[0].name
 
-  # Cluster map for ArgoCD - all 3 clusters registered via Workload Identity
-  argocd_clusters = terraform.workspace == "gitops" ? {
-    gitops = {
-      name     = "gitops-cluster"
-      endpoint = data.google_container_cluster.gitops[0].endpoint
-      ca_cert  = data.google_container_cluster.gitops[0].master_auth[0].cluster_ca_certificate
+  # Cluster map for ArgoCD - gitops always present, remote clusters only when they exist
+  argocd_clusters = terraform.workspace == "gitops" ? merge(
+    {
+      gitops = {
+        name     = "gitops-cluster"
+        endpoint = data.google_container_cluster.gitops[0].endpoint
+        ca_cert  = data.google_container_cluster.gitops[0].master_auth[0].cluster_ca_certificate
+      }
+    },
+    {
+      for name, cluster in data.google_container_cluster.remote : name => {
+        name     = "${name}-cluster"
+        endpoint = cluster.endpoint
+        ca_cert  = cluster.master_auth[0].cluster_ca_certificate
+      }
     }
-    dev = {
-      name     = "dev-cluster"
-      endpoint = data.google_container_cluster.dev[0].endpoint
-      ca_cert  = data.google_container_cluster.dev[0].master_auth[0].cluster_ca_certificate
-    }
-    staging = {
-      name     = "staging-cluster"
-      endpoint = data.google_container_cluster.staging[0].endpoint
-      ca_cert  = data.google_container_cluster.staging[0].master_auth[0].cluster_ca_certificate
-    }
-  } : {}
+  ) : {}
 
   # Clusters whose secrets are managed by ESO (all except gitops)
   eso_managed_clusters = terraform.workspace == "gitops" ? {
