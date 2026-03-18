@@ -10,8 +10,8 @@ echo "🚀 Loading GCloud Aliases..."
 
 # Cloud Build Operations
 alias gcb-submit='gcloud builds submit'
-alias gcb-test='gcloud builds submit --config=cloudbuild-test.yaml'
-alias gcb-prod='gcloud builds submit --config=cloudbuild.yaml'
+alias gcb-test='gcloud builds submit --config=cicd/cloudbuild-test.yaml'
+alias gcb-prod='gcloud builds submit --config=cicd/cloudbuild.yaml'
 alias gcb-logs='gcloud builds log'
 alias gcb-list='gcloud builds list --limit=10'
 alias gcb-cancel='gcloud builds cancel'
@@ -133,7 +133,7 @@ alias gba-attestors='gcloud container binauthz attestors list'
 
 # Function to submit build and follow logs
 gcb-submit-follow() {
-    local config_file=${1:-cloudbuild.yaml}
+    local config_file=${1:-cicd/cloudbuild.yaml}
     echo "🚀 Submitting build with config: $config_file"
     gcloud builds submit --config="$config_file" --stream-logs
 }
@@ -212,11 +212,11 @@ gcloud-health-check() {
 # Function to quickly submit test build
 gcb-quick-test() {
     echo "🧪 Quick Test Build"
-    if [ -f "cloudbuild-test.yaml" ]; then
-        gcloud builds submit --config=cloudbuild-test.yaml --stream-logs
-    elif [ -f "cloudbuild.yaml" ]; then
+    if [ -f "cicd/cloudbuild-test.yaml" ]; then
+        gcloud builds submit --config=cicd/cloudbuild-test.yaml --stream-logs
+    elif [ -f "cicd/cloudbuild.yaml" ]; then
         echo "⚠️  No test config found, using main cloudbuild.yaml"
-        gcloud builds submit --config=cloudbuild.yaml --stream-logs
+        gcloud builds submit --config=cicd/cloudbuild.yaml --stream-logs
     else
         echo "❌ No Cloud Build configuration found"
         return 1

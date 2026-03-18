@@ -41,7 +41,7 @@ cat > /tmp/destroy-job.json <<EOF
       "repoName": "github_muyisbox_gke",
       "branchName": "main"
     },
-    "buildConfigPath": "cloudbuild-destroy.yaml"
+    "buildConfigPath": "cicd/cloudbuild-destroy.yaml"
   }
 }
 EOF
@@ -75,7 +75,7 @@ cat > /tmp/create-job.json <<EOF
       "repoName": "github_muyisbox_gke",
       "branchName": "main"
     },
-    "buildConfigPath": "cloudbuild-create.yaml"
+    "buildConfigPath": "cicd/cloudbuild-create.yaml"
   }
 }
 EOF

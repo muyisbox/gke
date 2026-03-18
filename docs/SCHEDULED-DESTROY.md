@@ -31,7 +31,7 @@ Automatically destroy and recreate dev/staging workspaces to save costs during o
 - Schedule: `0 2 * * *`
 - Timezone: `America/New_York`
 - Branch: `main`
-- Cloud Build config: `cloudbuild-destroy.yaml`
+- Cloud Build config: `cicd/cloudbuild-destroy.yaml`
 
 **Create Trigger:**
 - Name: `scheduled-create-dev-staging`
@@ -39,14 +39,14 @@ Automatically destroy and recreate dev/staging workspaces to save costs during o
 - Schedule: `0 10 * * *`
 - Timezone: `America/New_York`
 - Branch: `main`
-- Cloud Build config: `cloudbuild-create.yaml`
+- Cloud Build config: `cicd/cloudbuild-create.yaml`
 
 ### Option 2: Automated Setup (gcloud)
 
 ```bash
 # Run the setup script
-chmod +x setup-scheduled-triggers.sh
-./setup-scheduled-triggers.sh cluster-dreams
+chmod +x scripts/setup-scheduled-triggers.sh
+./scripts/setup-scheduled-triggers.sh cluster-dreams
 ```
 
 ### Option 3: Cloud Scheduler (Most Flexible)
@@ -63,7 +63,7 @@ gcloud builds triggers create manual \
   --project=cluster-dreams \
   --region=us-central1 \
   --name=scheduled-destroy-dev-staging \
-  --build-config=cloudbuild-destroy.yaml \
+  --build-config=cicd/cloudbuild-destroy.yaml \
   --repo=https://github.com/muyisbox/gke \
   --repo-type=GITHUB \
   --branch=main
@@ -72,7 +72,7 @@ gcloud builds triggers create manual \
   --project=cluster-dreams \
   --region=us-central1 \
   --name=scheduled-create-dev-staging \
-  --build-config=cloudbuild-create.yaml \
+  --build-config=cicd/cloudbuild-create.yaml \
   --repo=https://github.com/muyisbox/gke \
   --repo-type=GITHUB \
   --branch=main
@@ -110,13 +110,13 @@ gcloud scheduler jobs create http scheduled-create-dev-staging \
 ### Test Destroy Manually
 
 ```bash
-gcloud builds submit --config=cloudbuild-destroy.yaml
+gcloud builds submit --config=cicd/cloudbuild-destroy.yaml
 ```
 
 ### Test Create Manually
 
 ```bash
-gcloud builds submit --config=cloudbuild-create.yaml
+gcloud builds submit --config=cicd/cloudbuild-create.yaml
 ```
 
 ### Trigger via Cloud Scheduler (without waiting)
@@ -155,7 +155,7 @@ gcloud builds list --filter="buildTriggerId:scheduled-create-dev-staging" --limi
 
 ### Add Slack Notifications
 
-Add to both `cloudbuild-destroy.yaml` and `cloudbuild-create.yaml`:
+Add to both `cicd/cloudbuild-destroy.yaml` and `cicd/cloudbuild-create.yaml`:
 
 ```yaml
 - name: gcr.io/cloud-builders/gcloud

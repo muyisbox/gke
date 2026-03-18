@@ -49,7 +49,7 @@ gcloud builds triggers create github \
   --repo-name="$GITHUB_REPO" \
   --repo-owner="$GITHUB_OWNER" \
   --pull-request-pattern="^.*$" \
-  --build-config="cloudbuild-plan.yaml" \
+  --build-config="cicd/cloudbuild-plan.yaml" \
   --comment-control="COMMENTS_ENABLED" \
   --description="Run terraform plan on all workspaces for PRs" \
   --substitutions='_PR_NUMBER=$(PULL_REQUEST_NUMBER)' \
@@ -60,7 +60,7 @@ echo "✓ PR plan trigger configured:"
 echo "  - Name: pr-plan-all-workspaces"
 echo "  - Triggers on: All pull requests"
 echo "  - Action: terraform plan (no apply)"
-echo "  - Config: cloudbuild-plan.yaml"
+echo "  - Config: cicd/cloudbuild-plan.yaml"
 echo ""
 
 ###################
@@ -76,7 +76,7 @@ gcloud builds triggers create github \
   --repo-name="$GITHUB_REPO" \
   --repo-owner="$GITHUB_OWNER" \
   --branch-pattern="^main$" \
-  --build-config="cloudbuild.yaml" \
+  --build-config="cicd/cloudbuild.yaml" \
   --description="Apply terraform changes when merged to main" \
   2>&1 | grep -v "already exists" || echo "✓ Trigger already exists"
 
@@ -85,7 +85,7 @@ echo "✓ Main branch apply trigger configured:"
 echo "  - Name: main-apply-all-workspaces"
 echo "  - Triggers on: Push to main branch"
 echo "  - Action: terraform plan + apply"
-echo "  - Config: cloudbuild.yaml"
+echo "  - Config: cicd/cloudbuild.yaml"
 echo ""
 
 ###################
@@ -101,7 +101,7 @@ gcloud builds triggers create github \
   --repo-name="$GITHUB_REPO" \
   --repo-owner="$GITHUB_OWNER" \
   --branch-pattern="^feature/.*$" \
-  --build-config="cloudbuild-test.yaml" \
+  --build-config="cicd/cloudbuild-test.yaml" \
   --description="Run tests on feature branches" \
   2>&1 | grep -v "already exists" || echo "✓ Trigger already exists"
 
@@ -110,7 +110,7 @@ echo "✓ Feature branch test trigger configured:"
 echo "  - Name: feature-branch-test"
 echo "  - Triggers on: Push to feature/* branches"
 echo "  - Action: Run validation tests"
-echo "  - Config: cloudbuild-test.yaml"
+echo "  - Config: cicd/cloudbuild-test.yaml"
 echo ""
 
 ###################
@@ -152,7 +152,7 @@ echo "   - Check Cloud Build for plan output"
 echo "   - Merge PR to trigger apply"
 echo ""
 echo "3. Optional: Enable PR comments"
-echo "   - See PR-WORKFLOW.md for setup instructions"
+echo "   - See docs/PR-WORKFLOW.md for setup instructions"
 echo "   - Requires GitHub App authentication"
 echo ""
 echo "4. Monitor builds:"
