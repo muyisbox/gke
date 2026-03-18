@@ -26,7 +26,7 @@ module "gke" {
       min_count          = 1
       max_count          = 4
       local_ssd_count    = 0
-      spot               = true
+      spot               = false
       disk_size_gb       = 50
       disk_type          = "pd-ssd"
       image_type         = "COS_CONTAINERD"
