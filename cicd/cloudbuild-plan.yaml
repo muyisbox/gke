@@ -16,14 +16,14 @@ steps:
 
 # Terraform Init (shared)
 - id: terraform-init
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   args:
   - -c
   - |
     set -e
     echo "Initializing Terraform..."
-    terraform init -backend-config="prefix=terraform/state"
+    terraform init -upgrade -backend-config="prefix=terraform/state"
   timeout: 300s
 
 ###################
@@ -31,7 +31,7 @@ steps:
 ###################
 
 - id: setup-gitops-plan
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - terraform-init
@@ -45,7 +45,7 @@ steps:
   timeout: 300s
 
 - id: plan-gitops
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - setup-gitops-plan
@@ -84,7 +84,7 @@ steps:
 ###################
 
 - id: setup-dev-plan
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - plan-gitops
@@ -98,7 +98,7 @@ steps:
   timeout: 300s
 
 - id: plan-dev
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - setup-dev-plan
@@ -137,7 +137,7 @@ steps:
 ###################
 
 - id: setup-staging-plan
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - plan-dev
@@ -151,7 +151,7 @@ steps:
   timeout: 300s
 
 - id: plan-staging
-  name: hashicorp/terraform:1.11
+  name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
   - setup-staging-plan

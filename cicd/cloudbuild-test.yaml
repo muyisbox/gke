@@ -71,7 +71,7 @@ steps:
   timeout: 300s
 
 # Test simple terraform validation
-- name: hashicorp/terraform:1.11
+- name: hashicorp/terraform:1.14
   id: terraform-validate
   entrypoint: /bin/sh
   args:
