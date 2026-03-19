@@ -12,6 +12,7 @@ helm:
         storageSpec:
           volumeClaimTemplate:
             spec:
+              storageClassName: standard
               resources:
                 requests:
                   storage: 5Gi
@@ -31,6 +32,7 @@ helm:
         storageSpec:
           volumeClaimTemplate:
             spec:
+              storageClassName: standard
               resources:
                 requests:
                   storage: 10Gi
