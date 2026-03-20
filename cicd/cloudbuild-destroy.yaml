@@ -62,7 +62,7 @@ steps:
             echo "DESTROY_STATUS_$(echo $ws | tr '[:lower:]' '[:upper:]')=NO_STATE" >> $BUILD_ID-status.env
         fi
     done
-  timeout: 3600s
+  timeout: 3300s
 
 # Summary
 - name: alpine:3.21

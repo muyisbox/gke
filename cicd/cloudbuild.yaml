@@ -232,7 +232,7 @@ steps:
     else
         echo "Skipping apply on branch $BRANCH_NAME (only runs on main/master)"
     fi
-  timeout: 7200s
+  timeout: 6900s
 
 ###################
 # BUILD SUMMARY

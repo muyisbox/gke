@@ -64,7 +64,7 @@ steps:
             exit 1
         fi
     done
-  timeout: 3600s
+  timeout: 2000s
 
 ###################
 # SUMMARIZE ALL WORKSPACES
@@ -142,4 +142,4 @@ substitutions:
   # To add a new environment, add its workspace name here.
   _WORKSPACES: gitops dev staging
 
-timeout: 2400s
+timeout: 3600s

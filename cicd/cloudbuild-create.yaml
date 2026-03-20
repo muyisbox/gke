@@ -71,7 +71,7 @@ steps:
             exit 1
         fi
     done
-  timeout: 3600s
+  timeout: 3300s
 
 # Summary
 - name: alpine:3.21
