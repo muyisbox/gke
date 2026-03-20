@@ -55,6 +55,13 @@ variable "cluster_autoscaling" {
 
 
 
+variable "environments" {
+  description = "Map of environments. Each entry provisions a GKE cluster, subnet, and secondary IP ranges. To add a new environment, add an entry here and run: terraform workspace new <name> && terraform apply"
+  type = map(object({
+    node_cidr = string
+  }))
+}
+
 variable "eso_version" {
   description = "External Secrets Operator version - used for CRD installation and chart deployment"
   type        = string

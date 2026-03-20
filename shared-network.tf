@@ -13,7 +13,7 @@ module "shared-network" {
   network_name = "shared-gke-network"
 
   subnets = [
-    for env, cfg in local.environments : {
+    for env, cfg in var.environments : {
       subnet_name           = "gke-subnet-${env}"
       subnet_ip             = cfg.node_cidr
       subnet_region         = var.region
@@ -22,15 +22,15 @@ module "shared-network" {
   ]
 
   secondary_ranges = {
-    for env, cfg in local.environments :
+    for env, cfg in var.environments :
     "gke-subnet-${env}" => [
       {
         range_name    = "${env}-pods"
-        ip_cidr_range = cidrsubnet(cfg.range_base, 1, 0)
+        ip_cidr_range = cidrsubnet(cidrsubnet("172.16.0.0/12", 5, local.env_index[env]), 1, 0)
       },
       {
         range_name    = "${env}-services"
-        ip_cidr_range = cidrsubnet(cfg.range_base, 1, 1)
+        ip_cidr_range = cidrsubnet(cidrsubnet("172.16.0.0/12", 5, local.env_index[env]), 1, 1)
       },
     ]
   }

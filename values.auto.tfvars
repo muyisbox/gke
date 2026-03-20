@@ -10,6 +10,17 @@ zones               = ["us-central1-c", "us-central1-b", "us-central1-a"] # Zone
 cluster_name_suffix = "dev"                                               # Suffix to append to the cluster name indicating the environment
 
 
+# Environments
+# To add a new environment (e.g. "prod"):
+#   1. Add an entry below with a unique node_cidr, range_base, and master_cidr_offset
+#   2. Create gke-applications/prod/ with app definitions
+#   3. Run: terraform workspace new prod && terraform apply
+environments = {
+  dev     = { node_cidr = "10.10.0.0/17" }
+  gitops  = { node_cidr = "10.30.0.0/17" }
+  staging = { node_cidr = "10.20.0.0/17" }
+}
+
 # ArgoCD Configuration
 # Sets up ArgoCD in the cluster to manage deployments and configurations.
 argocd = {
