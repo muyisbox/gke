@@ -56,9 +56,11 @@ variable "cluster_autoscaling" {
 
 
 variable "environments" {
-  description = "Map of environments. Each entry provisions a GKE cluster, subnet, and secondary IP ranges. To add a new environment, add an entry here and run: terraform workspace new <name> && terraform apply"
+  description = "Map of environments. Each entry provisions a GKE cluster, subnet, and secondary IP ranges. CIDRs must be unique and stable — changing them forces cluster recreation. To add a new environment, add an entry with non-overlapping CIDRs and the next available master_cidr_offset."
   type = map(object({
-    node_cidr = string
+    node_cidr          = string
+    range_base         = string
+    master_cidr_offset = number
   }))
 }
 

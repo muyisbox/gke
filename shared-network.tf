@@ -26,11 +26,11 @@ module "shared-network" {
     "gke-subnet-${env}" => [
       {
         range_name    = "${env}-pods"
-        ip_cidr_range = cidrsubnet(cidrsubnet("172.16.0.0/12", 5, local.env_index[env]), 1, 0)
+        ip_cidr_range = cidrsubnet(cfg.range_base, 1, 0)
       },
       {
         range_name    = "${env}-services"
-        ip_cidr_range = cidrsubnet(cidrsubnet("172.16.0.0/12", 5, local.env_index[env]), 1, 1)
+        ip_cidr_range = cidrsubnet(cfg.range_base, 1, 1)
       },
     ]
   }

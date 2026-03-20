@@ -1,14 +1,9 @@
 locals {
-  # Stable alphabetical ordering used to derive per-environment indexes
-  sorted_envs = sort(keys(var.environments))
-  env_index   = { for env in local.sorted_envs : env => index(local.sorted_envs, env) }
-
   # All non-gitops workspaces — used to discover remote clusters for ArgoCD
-  remote_workspaces = [for env in local.sorted_envs : env if env != "gitops"]
+  remote_workspaces = [for env in keys(var.environments) : env if env != "gitops"]
 
-  # Derived lookups (keep backwards-compatible names used elsewhere)
-  # range_base: cidrsubnet("172.16.0.0/12", 5, i) gives 172.16.0.0/17, 172.17.0.0/17, 172.18.0.0/17 ...
-  master_cidr_offsets = { for env in local.sorted_envs : env => tostring(local.env_index[env]) }
+  # Derived lookups
+  master_cidr_offsets = { for env, cfg in var.environments : env => tostring(cfg.master_cidr_offset) }
   # Shared network name - gitops creates, others reference via data source
   shared_network_name = terraform.workspace == "gitops" ? module.shared-network[0].network_name : data.google_compute_network.shared_network[0].name
 

@@ -16,9 +16,21 @@ cluster_name_suffix = "dev"                                               # Suff
 #   2. Create gke-applications/prod/ with app definitions
 #   3. Run: terraform workspace new prod && terraform apply
 environments = {
-  dev     = { node_cidr = "10.10.0.0/17" }
-  gitops  = { node_cidr = "10.30.0.0/17" }
-  staging = { node_cidr = "10.20.0.0/17" }
+  dev = {
+    node_cidr          = "10.10.0.0/17"
+    range_base         = "172.16.0.0/17"
+    master_cidr_offset = 0
+  }
+  staging = {
+    node_cidr          = "10.20.0.0/17"
+    range_base         = "172.17.0.0/17"
+    master_cidr_offset = 1
+  }
+  gitops = {
+    node_cidr          = "10.30.0.0/17"
+    range_base         = "172.18.0.0/17"
+    master_cidr_offset = 2
+  }
 }
 
 # ArgoCD Configuration
