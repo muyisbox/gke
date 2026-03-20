@@ -1,6 +1,6 @@
 steps:
 # Environment Info
-- name: alpine:3.18
+- name: alpine:3.21
   id: environment-info
   entrypoint: /bin/sh
   args:
@@ -12,6 +12,7 @@ steps:
     echo "Pull Request: ${_PR_NUMBER:-N/A}"
     echo "Project ID: $PROJECT_ID"
     echo "Commit SHA: ${COMMIT_SHA:-N/A}"
+    echo "Workspaces: ${_WORKSPACES}"
     echo "=================================="
     echo "BUILD_START=$(date -Iseconds)" > $BUILD_ID-status.env
   timeout: 60s
@@ -103,10 +104,12 @@ steps:
   timeout: 120s
 
 ###################
-# GITOPS WORKSPACE
+# PLAN ALL WORKSPACES
+# Runs gitops first (owns shared network), then remaining workspaces in order.
+# To add a new workspace, update _WORKSPACES in the substitutions section below.
 ###################
 
-- id: setup-gitops
+- id: plan-all
   name: hashicorp/terraform:1.14
   waitFor:
   - security-report
@@ -120,78 +123,76 @@ steps:
         set -euo pipefail
         echo "Initializing Terraform..."
         terraform init -reconfigure -upgrade -input=false
-        terraform workspace select gitops || terraform workspace new gitops
-        echo "Running Terraform validation..."
         terraform validate
-    else
-        echo "Skipping setup on branch $BRANCH_NAME"
-        exit 0
-    fi
-  timeout: 600s
 
-- id: plan-gitops
-  name: hashicorp/terraform:1.14
-  waitFor:
-  - setup-gitops
-  entrypoint: /bin/sh
-  secretEnv:
-  - GOOGLE_CREDENTIALS
-  args:
-  - -c
-  - |
-    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "${_PR_NUMBER:-}" ]; then
-        set -euo pipefail
-        terraform workspace select gitops
-        plan_file="/workspace/$BUILD_ID/tfplan_gitops"
-        plan_output="/tmp/plan_output_gitops.txt"
-        mkdir -p "$(dirname "$plan_file")"
+        mkdir -p "/workspace/$BUILD_ID"
 
-        set +eo pipefail
-        terraform plan \
-            -detailed-exitcode \
-            -parallelism=30 \
-            -var="project_id=$PROJECT_ID" \
-            -out="$plan_file" \
-            > "$plan_output" 2>&1; plan_exit_code=$?
-        cat "$plan_output"
-        set -e
+        for ws in ${_WORKSPACES}; do
+            echo "================================"
+            echo "PLANNING workspace: $ws"
+            echo "================================"
+            terraform workspace select "$ws" || terraform workspace new "$ws"
 
-        case $plan_exit_code in
-            0) echo "No changes detected" ;;
-            1) echo "Plan failed"; exit 1 ;;
-            2)
-                echo "Plan succeeded with changes"
-                terraform show -json "$plan_file" > "${plan_file}.json"
-                ;;
-        esac
-        exit 0
+            plan_file="/workspace/$BUILD_ID/tfplan_${ws}"
+            plan_output="/tmp/plan_output_${ws}.txt"
+
+            set +eo pipefail
+            terraform plan \
+                -detailed-exitcode \
+                -parallelism=30 \
+                -var="project_id=$PROJECT_ID" \
+                -out="$plan_file" \
+                > "$plan_output" 2>&1; plan_exit_code=$?
+            cat "$plan_output"
+            set -e
+
+            case $plan_exit_code in
+                0) echo "No changes detected for $ws" ;;
+                1) echo "Plan failed for $ws"; exit 1 ;;
+                2)
+                    echo "Plan succeeded with changes for $ws"
+                    terraform show -json "$plan_file" > "${plan_file}.json"
+                    ;;
+            esac
+        done
     else
         echo "Skipping plan on branch $BRANCH_NAME"
     fi
-  timeout: 1200s
+  timeout: 3600s
 
-- id: summarize-gitops
+###################
+# SUMMARIZE ALL WORKSPACES
+###################
+
+- id: summarize-all
   name: ghcr.io/dineshba/tf-summarize:latest
   waitFor:
-  - plan-gitops
+  - plan-all
   entrypoint: /bin/sh
   args:
   - -c
   - |
-    json_file="/workspace/$BUILD_ID/tfplan_gitops.json"
-    if [ -f "$json_file" ]; then
-        echo "=== Plan Summary: gitops ==="
-        tf-summarize "$json_file"
-        echo "============================"
-    else
-        echo "No changes detected for gitops"
-    fi
+    for ws in ${_WORKSPACES}; do
+        json_file="/workspace/$BUILD_ID/tfplan_${ws}.json"
+        if [ -f "$json_file" ]; then
+            echo "=== Plan Summary: $ws ==="
+            tf-summarize "$json_file"
+            echo "=========================="
+        else
+            echo "No changes detected for $ws"
+        fi
+    done
   timeout: 120s
 
-- id: apply-gitops
+###################
+# APPLY ALL WORKSPACES
+# gitops first (shared network), then remaining workspaces in order.
+###################
+
+- id: apply-all
   name: hashicorp/terraform:1.14
   waitFor:
-  - summarize-gitops
+  - summarize-all
   entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
@@ -201,295 +202,47 @@ steps:
     if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
         set -euo pipefail
         terraform init -reconfigure -upgrade -input=false
-        terraform workspace select gitops
-        plan_file="/workspace/$BUILD_ID/tfplan_gitops"
 
-        if [ ! -f "$plan_file" ]; then
-            echo "Error: Plan file not found: $plan_file"
-            exit 1
-        fi
+        for ws in ${_WORKSPACES}; do
+            echo "================================"
+            echo "APPLYING workspace: $ws"
+            echo "================================"
+            terraform workspace select "$ws"
 
-        echo "Creating state backup..."
-        terraform state pull > "/tmp/terraform_gitops_backup_${BUILD_ID}.tfstate"
+            plan_file="/workspace/$BUILD_ID/tfplan_${ws}"
+            if [ ! -f "$plan_file" ]; then
+                echo "No plan file for $ws (no changes), skipping apply"
+                continue
+            fi
 
-        echo "Starting Terraform apply..."
-        start_time=$(date +%s)
-        if terraform apply -parallelism=30 -auto-approve -input=false "$plan_file"; then
-            end_time=$(date +%s)
-            duration=$((end_time - start_time))
-            echo "Apply completed successfully in $duration seconds"
-            echo "APPLY_STATUS_GITOPS=SUCCESS" >> $BUILD_ID-status.env
-        else
-            echo "Apply failed for workspace: gitops"
-            echo "APPLY_STATUS_GITOPS=FAILED" >> $BUILD_ID-status.env
-            exit 1
-        fi
+            echo "Creating state backup..."
+            terraform state pull > "/tmp/terraform_${ws}_backup_${BUILD_ID}.tfstate"
+
+            start_time=$(date +%s)
+            if terraform apply -parallelism=30 -auto-approve -input=false "$plan_file"; then
+                end_time=$(date +%s)
+                echo "Apply completed for $ws in $((end_time - start_time))s"
+                echo "APPLY_STATUS_$(echo $ws | tr '[:lower:]' '[:upper:]')=SUCCESS" >> $BUILD_ID-status.env
+            else
+                echo "Apply failed for workspace: $ws"
+                echo "APPLY_STATUS_$(echo $ws | tr '[:lower:]' '[:upper:]')=FAILED" >> $BUILD_ID-status.env
+                exit 1
+            fi
+        done
     else
         echo "Skipping apply on branch $BRANCH_NAME (only runs on main/master)"
     fi
-  timeout: 2400s
-
-###################
-# DEV WORKSPACE
-###################
-
-- id: setup-dev
-  name: hashicorp/terraform:1.14
-  waitFor:
-  - apply-gitops
-  entrypoint: /bin/sh
-  secretEnv:
-  - GOOGLE_CREDENTIALS
-  args:
-  - -c
-  - |
-    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "${_PR_NUMBER:-}" ]; then
-        set -euo pipefail
-        terraform init -reconfigure -upgrade -input=false
-        terraform workspace select dev || terraform workspace new dev
-        terraform validate
-    else
-        echo "Skipping setup on branch $BRANCH_NAME"
-        exit 0
-    fi
-  timeout: 600s
-
-- id: plan-dev
-  name: hashicorp/terraform:1.14
-  waitFor:
-  - setup-dev
-  entrypoint: /bin/sh
-  secretEnv:
-  - GOOGLE_CREDENTIALS
-  args:
-  - -c
-  - |
-    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "${_PR_NUMBER:-}" ]; then
-        set -euo pipefail
-        terraform workspace select dev
-        plan_file="/workspace/$BUILD_ID/tfplan_dev"
-        plan_output="/tmp/plan_output_dev.txt"
-        mkdir -p "$(dirname "$plan_file")"
-
-        set +eo pipefail
-        terraform plan \
-            -detailed-exitcode \
-            -parallelism=30 \
-            -var="project_id=$PROJECT_ID" \
-            -out="$plan_file" \
-            > "$plan_output" 2>&1; plan_exit_code=$?
-        cat "$plan_output"
-        set -e
-
-        case $plan_exit_code in
-            0) echo "No changes detected" ;;
-            1) echo "Plan failed"; exit 1 ;;
-            2)
-                echo "Plan succeeded with changes"
-                terraform show -json "$plan_file" > "${plan_file}.json"
-                ;;
-        esac
-        exit 0
-    else
-        echo "Skipping plan on branch $BRANCH_NAME"
-    fi
-  timeout: 1200s
-
-- id: summarize-dev
-  name: ghcr.io/dineshba/tf-summarize:latest
-  waitFor:
-  - plan-dev
-  entrypoint: /bin/sh
-  args:
-  - -c
-  - |
-    json_file="/workspace/$BUILD_ID/tfplan_dev.json"
-    if [ -f "$json_file" ]; then
-        echo "=== Plan Summary: dev ==="
-        tf-summarize "$json_file"
-        echo "========================="
-    else
-        echo "No changes detected for dev"
-    fi
-  timeout: 120s
-
-- id: apply-dev
-  name: hashicorp/terraform:1.14
-  waitFor:
-  - summarize-dev
-  entrypoint: /bin/sh
-  secretEnv:
-  - GOOGLE_CREDENTIALS
-  args:
-  - -c
-  - |
-    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-        set -euo pipefail
-        terraform init -reconfigure -upgrade -input=false
-        terraform workspace select dev
-        plan_file="/workspace/$BUILD_ID/tfplan_dev"
-
-        if [ ! -f "$plan_file" ]; then
-            echo "Error: Plan file not found: $plan_file"
-            exit 1
-        fi
-
-        echo "Creating state backup..."
-        terraform state pull > "/tmp/terraform_dev_backup_${BUILD_ID}.tfstate"
-
-        echo "Starting Terraform apply..."
-        start_time=$(date +%s)
-        if terraform apply -parallelism=30 -auto-approve -input=false "$plan_file"; then
-            end_time=$(date +%s)
-            duration=$((end_time - start_time))
-            echo "Apply completed successfully in $duration seconds"
-            echo "APPLY_STATUS_DEV=SUCCESS" >> $BUILD_ID-status.env
-        else
-            echo "Apply failed for workspace: dev"
-            echo "APPLY_STATUS_DEV=FAILED" >> $BUILD_ID-status.env
-            exit 1
-        fi
-    else
-        echo "Skipping apply on branch $BRANCH_NAME (only runs on main/master)"
-    fi
-  timeout: 2400s
-
-###################
-# STAGING WORKSPACE
-###################
-
-- id: setup-staging
-  name: hashicorp/terraform:1.14
-  waitFor:
-  - apply-dev
-  entrypoint: /bin/sh
-  secretEnv:
-  - GOOGLE_CREDENTIALS
-  args:
-  - -c
-  - |
-    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "${_PR_NUMBER:-}" ]; then
-        set -euo pipefail
-        terraform init -reconfigure -upgrade -input=false
-        terraform workspace select staging || terraform workspace new staging
-        terraform validate
-    else
-        echo "Skipping setup on branch $BRANCH_NAME"
-        exit 0
-    fi
-  timeout: 600s
-
-- id: plan-staging
-  name: hashicorp/terraform:1.14
-  waitFor:
-  - setup-staging
-  entrypoint: /bin/sh
-  secretEnv:
-  - GOOGLE_CREDENTIALS
-  args:
-  - -c
-  - |
-    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ] || [ -n "${_PR_NUMBER:-}" ]; then
-        set -euo pipefail
-        terraform workspace select staging
-        plan_file="/workspace/$BUILD_ID/tfplan_staging"
-        plan_output="/tmp/plan_output_staging.txt"
-        mkdir -p "$(dirname "$plan_file")"
-
-        set +eo pipefail
-        terraform plan \
-            -detailed-exitcode \
-            -parallelism=30 \
-            -var="project_id=$PROJECT_ID" \
-            -out="$plan_file" \
-            > "$plan_output" 2>&1; plan_exit_code=$?
-        cat "$plan_output"
-        set -e
-
-        case $plan_exit_code in
-            0) echo "No changes detected" ;;
-            1) echo "Plan failed"; exit 1 ;;
-            2)
-                echo "Plan succeeded with changes"
-                terraform show -json "$plan_file" > "${plan_file}.json"
-                ;;
-        esac
-        exit 0
-    else
-        echo "Skipping plan on branch $BRANCH_NAME"
-    fi
-  timeout: 1200s
-
-- id: summarize-staging
-  name: ghcr.io/dineshba/tf-summarize:latest
-  waitFor:
-  - plan-staging
-  entrypoint: /bin/sh
-  args:
-  - -c
-  - |
-    json_file="/workspace/$BUILD_ID/tfplan_staging.json"
-    if [ -f "$json_file" ]; then
-        echo "=== Plan Summary: staging ==="
-        tf-summarize "$json_file"
-        echo "============================="
-    else
-        echo "No changes detected for staging"
-    fi
-  timeout: 120s
-
-- id: apply-staging
-  name: hashicorp/terraform:1.14
-  waitFor:
-  - summarize-staging
-  entrypoint: /bin/sh
-  secretEnv:
-  - GOOGLE_CREDENTIALS
-  args:
-  - -c
-  - |
-    if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-        set -euo pipefail
-        terraform init -reconfigure -upgrade -input=false
-        terraform workspace select staging
-        plan_file="/workspace/$BUILD_ID/tfplan_staging"
-
-        if [ ! -f "$plan_file" ]; then
-            echo "Error: Plan file not found: $plan_file"
-            exit 1
-        fi
-
-        echo "Creating state backup..."
-        terraform state pull > "/tmp/terraform_staging_backup_${BUILD_ID}.tfstate"
-
-        echo "Starting Terraform apply..."
-        start_time=$(date +%s)
-        if terraform apply -parallelism=30 -auto-approve -input=false "$plan_file"; then
-            end_time=$(date +%s)
-            duration=$((end_time - start_time))
-            echo "Apply completed successfully in $duration seconds"
-            echo "APPLY_STATUS_STAGING=SUCCESS" >> $BUILD_ID-status.env
-        else
-            echo "Apply failed for workspace: staging"
-            echo "APPLY_STATUS_STAGING=FAILED" >> $BUILD_ID-status.env
-            exit 1
-        fi
-    else
-        echo "Skipping apply on branch $BRANCH_NAME (only runs on main/master)"
-    fi
-  timeout: 2400s
+  timeout: 7200s
 
 ###################
 # BUILD SUMMARY
 ###################
 
-- name: alpine:3.18
+- name: alpine:3.21
   id: build-summary
   entrypoint: /bin/sh
   waitFor:
-  - apply-gitops
-  - apply-dev
-  - apply-staging
+  - apply-all
   args:
   - -c
   - |
@@ -503,7 +256,7 @@ steps:
     touch $BUILD_ID-plan-summary.txt
   timeout: 60s
 
-timeout: 3600s
+timeout: 7200s
 options:
   substitutionOption: ALLOW_LOOSE
   logging: CLOUD_LOGGING_ONLY
@@ -512,6 +265,10 @@ options:
 substitutions:
   _PR_NUMBER: ''
   _TERRAFORM_VERSION: '1.14'
+  # Space-separated list of workspaces to plan/apply, in order.
+  # gitops must be first (it owns the shared network).
+  # To add a new environment, add its workspace name here.
+  _WORKSPACES: gitops dev staging
 availableSecrets:
   secretManager:
   - versionName: projects/$PROJECT_ID/secrets/terraform-service-account/versions/latest

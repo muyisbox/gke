@@ -1,15 +1,15 @@
 steps:
 # Environment Info
-- name: alpine:3.18
+- name: alpine:3.21
   id: environment-info
   entrypoint: /bin/sh
   args:
   - -c
   - |
-    echo "=== Scheduled Destroy - Dev & Staging ==="
+    echo "=== Scheduled Destroy ==="
     echo "Build ID: $BUILD_ID"
     echo "Triggered at: $(date)"
-    echo "Workspaces to destroy: dev, staging"
+    echo "Workspaces to destroy: ${_REMOTE_WORKSPACES}"
     echo "========================================"
   timeout: 60s
 
@@ -25,10 +25,12 @@ steps:
   timeout: 300s
 
 ###################
-# DEV WORKSPACE - DESTROY
+# DESTROY REMOTE WORKSPACES
+# gitops is excluded — it owns the shared network and runs continuously.
+# To add a new environment, add its workspace name to _REMOTE_WORKSPACES below.
 ###################
 
-- id: destroy-dev
+- id: destroy-all
   name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
@@ -38,98 +40,56 @@ steps:
   - |
     set -euo pipefail
 
-    workspace_name="dev"
-    echo "================================"
-    echo "DESTROYING workspace: $workspace_name"
-    echo "Creating state backup before destroy..."
-    echo "================================"
+    for ws in ${_REMOTE_WORKSPACES}; do
+        echo "================================"
+        echo "DESTROYING workspace: $ws"
+        echo "================================"
 
-    # Select workspace
-    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+        terraform workspace select "$ws" || terraform workspace new "$ws"
 
-    # Backup state before destroy
-    if terraform state pull > /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate 2>/dev/null; then
-        echo "State backup created: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
-
-        # Perform destroy
-        echo "Starting destroy operation..."
-        if terraform destroy -auto-approve; then
-            echo "Successfully destroyed workspace: $workspace_name"
-            echo "DESTROY_STATUS=SUCCESS" >> $BUILD_ID-status.env
+        if terraform state pull > "/tmp/terraform_${ws}_predestroy_${BUILD_ID}.tfstate" 2>/dev/null; then
+            echo "State backup created for $ws"
+            if terraform destroy -auto-approve; then
+                echo "Successfully destroyed workspace: $ws"
+                echo "DESTROY_STATUS_$(echo $ws | tr '[:lower:]' '[:upper:]')=SUCCESS" >> $BUILD_ID-status.env
+            else
+                echo "ERROR: Failed to destroy workspace: $ws"
+                echo "DESTROY_STATUS_$(echo $ws | tr '[:lower:]' '[:upper:]')=FAILED" >> $BUILD_ID-status.env
+                exit 1
+            fi
         else
-            echo "ERROR: Failed to destroy workspace: $workspace_name"
-            echo "DESTROY_STATUS=FAILED" >> $BUILD_ID-status.env
-            echo "Backup available at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
-            exit 1
+            echo "No state found for workspace: $ws, skipping"
+            echo "DESTROY_STATUS_$(echo $ws | tr '[:lower:]' '[:upper:]')=NO_STATE" >> $BUILD_ID-status.env
         fi
-    else
-        echo "No state found for workspace: $workspace_name"
-        echo "DESTROY_STATUS=NO_STATE" >> $BUILD_ID-status.env
-    fi
-  timeout: 1800s
-
-###################
-# STAGING WORKSPACE - DESTROY
-###################
-
-- id: destroy-staging
-  name: hashicorp/terraform:1.14
-  entrypoint: /bin/sh
-  waitFor:
-  - destroy-dev
-  args:
-  - -c
-  - |
-    set -euo pipefail
-
-    workspace_name="staging"
-    echo "================================"
-    echo "DESTROYING workspace: $workspace_name"
-    echo "Creating state backup before destroy..."
-    echo "================================"
-
-    # Select workspace
-    terraform workspace select $workspace_name || terraform workspace new $workspace_name
-
-    # Backup state before destroy
-    if terraform state pull > /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate 2>/dev/null; then
-        echo "State backup created: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
-
-        # Perform destroy
-        echo "Starting destroy operation..."
-        if terraform destroy -auto-approve; then
-            echo "Successfully destroyed workspace: $workspace_name"
-            echo "DESTROY_STATUS=SUCCESS" >> $BUILD_ID-status.env
-        else
-            echo "ERROR: Failed to destroy workspace: $workspace_name"
-            echo "DESTROY_STATUS=FAILED" >> $BUILD_ID-status.env
-            echo "Backup available at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
-            exit 1
-        fi
-    else
-        echo "No state found for workspace: $workspace_name"
-        echo "DESTROY_STATUS=NO_STATE" >> $BUILD_ID-status.env
-    fi
-  timeout: 1800s
+    done
+  timeout: 3600s
 
 # Summary
-- name: alpine:3.18
+- name: alpine:3.21
   id: destroy-summary
   entrypoint: /bin/sh
+  waitFor:
+  - destroy-all
   args:
   - -c
   - |
     echo "================================"
     echo "Scheduled Destroy Complete"
-    echo "Destroyed workspaces: dev, staging"
+    echo "Destroyed workspaces: ${_REMOTE_WORKSPACES}"
     echo "GitOps workspace: PRESERVED (has shared network)"
     echo "Completed at: $(date)"
     echo "Next recreation: 10 AM EST"
     echo "================================"
+    if [ -f "$BUILD_ID-status.env" ]; then cat $BUILD_ID-status.env; fi
   timeout: 60s
 
 options:
   machineType: E2_HIGHCPU_8
   logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  # Space-separated remote workspaces to destroy (gitops excluded — it owns the shared network).
+  # To add a new environment, add its workspace name here.
+  _REMOTE_WORKSPACES: dev staging
 
 timeout: 3600s

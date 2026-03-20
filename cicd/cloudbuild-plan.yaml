@@ -1,6 +1,6 @@
 steps:
 # Environment Info
-- name: alpine:3.18
+- name: alpine:3.21
   id: environment-info
   entrypoint: /bin/sh
   args:
@@ -9,8 +9,9 @@ steps:
     echo "=== PR Terraform Plan ==="
     echo "Build ID: $BUILD_ID"
     echo "Branch: $BRANCH_NAME"
-    echo "PR Number: $(_PR_NUMBER)"
+    echo "PR Number: ${_PR_NUMBER}"
     echo "Commit SHA: $SHORT_SHA"
+    echo "Workspaces: ${_WORKSPACES}"
     echo "========================="
   timeout: 60s
 
@@ -27,10 +28,12 @@ steps:
   timeout: 300s
 
 ###################
-# GITOPS WORKSPACE - PLAN
+# PLAN ALL WORKSPACES
+# gitops first (owns shared network), then remaining workspaces in order.
+# To add a new environment, update _WORKSPACES in the substitutions section below.
 ###################
 
-- id: setup-gitops-plan
+- id: plan-all
   name: hashicorp/terraform:1.14
   entrypoint: /bin/sh
   waitFor:
@@ -38,208 +41,53 @@ steps:
   args:
   - -c
   - |
-    workspace_name="gitops"
-    echo "Selecting workspace: $workspace_name"
-    terraform workspace select $workspace_name || terraform workspace new $workspace_name
-    terraform workspace show
-  timeout: 300s
-
-- id: plan-gitops
-  name: hashicorp/terraform:1.14
-  entrypoint: /bin/sh
-  waitFor:
-  - setup-gitops-plan
-  args:
-  - -c
-  - |
     set -euo pipefail
-    workspace_name="gitops"
-    plan_output="/workspace/plan_${workspace_name}.txt"
 
-    echo "================================"
-    echo "PLANNING workspace: $workspace_name"
-    echo "================================"
+    for ws in ${_WORKSPACES}; do
+        echo "================================"
+        echo "PLANNING workspace: $ws"
+        echo "================================"
+        terraform workspace select "$ws" || terraform workspace new "$ws"
 
-    terraform workspace select $workspace_name
+        plan_output="/workspace/plan_${ws}.txt"
 
-    # Run plan and capture output
-    if terraform plan -no-color -out=/workspace/tfplan_${workspace_name} | tee "$plan_output"; then
-        echo ""
-        echo "✓ Plan successful for workspace: $workspace_name"
-
-        # Check if there are changes
-        if grep -q "No changes" "$plan_output"; then
-            echo "STATUS: No changes detected"
+        if terraform plan -no-color -out="/workspace/tfplan_${ws}" | tee "$plan_output"; then
+            echo "✓ Plan successful for workspace: $ws"
+            if grep -q "No changes" "$plan_output"; then
+                echo "STATUS: No changes detected"
+            else
+                echo "STATUS: Changes detected"
+                terraform show -json "/workspace/tfplan_${ws}" > "/workspace/tfplan_${ws}.json"
+            fi
         else
-            echo "STATUS: Changes detected"
-            terraform show -json /workspace/tfplan_${workspace_name} > /workspace/tfplan_${workspace_name}.json
+            echo "✗ Plan failed for workspace: $ws"
+            exit 1
         fi
-    else
-        echo "✗ Plan failed for workspace: $workspace_name"
-        exit 1
-    fi
-  timeout: 600s
+    done
+  timeout: 3600s
 
-- id: summarize-gitops-plan
+###################
+# SUMMARIZE ALL WORKSPACES
+###################
+
+- id: summarize-all
   name: ghcr.io/dineshba/tf-summarize:latest
   waitFor:
-  - plan-gitops
+  - plan-all
   entrypoint: /bin/sh
   args:
   - -c
   - |
-    json_file="/workspace/tfplan_gitops.json"
-    if [ -f "$json_file" ]; then
-        echo "=== Plan Summary: gitops ==="
-        tf-summarize "$json_file"
-        echo "============================"
-    else
-        echo "No changes detected for gitops"
-    fi
-  timeout: 120s
-
-###################
-# DEV WORKSPACE - PLAN
-###################
-
-- id: setup-dev-plan
-  name: hashicorp/terraform:1.14
-  entrypoint: /bin/sh
-  waitFor:
-  - plan-gitops
-  args:
-  - -c
-  - |
-    workspace_name="dev"
-    echo "Selecting workspace: $workspace_name"
-    terraform workspace select $workspace_name || terraform workspace new $workspace_name
-    terraform workspace show
-  timeout: 300s
-
-- id: plan-dev
-  name: hashicorp/terraform:1.14
-  entrypoint: /bin/sh
-  waitFor:
-  - setup-dev-plan
-  args:
-  - -c
-  - |
-    set -euo pipefail
-    workspace_name="dev"
-    plan_output="/workspace/plan_${workspace_name}.txt"
-
-    echo "================================"
-    echo "PLANNING workspace: $workspace_name"
-    echo "================================"
-
-    terraform workspace select $workspace_name
-
-    # Run plan and capture output
-    if terraform plan -no-color -out=/workspace/tfplan_${workspace_name} | tee "$plan_output"; then
-        echo ""
-        echo "✓ Plan successful for workspace: $workspace_name"
-
-        # Check if there are changes
-        if grep -q "No changes" "$plan_output"; then
-            echo "STATUS: No changes detected"
+    for ws in ${_WORKSPACES}; do
+        json_file="/workspace/tfplan_${ws}.json"
+        if [ -f "$json_file" ]; then
+            echo "=== Plan Summary: $ws ==="
+            tf-summarize "$json_file"
+            echo "=========================="
         else
-            echo "STATUS: Changes detected"
-            terraform show -json /workspace/tfplan_${workspace_name} > /workspace/tfplan_${workspace_name}.json
+            echo "No changes detected for $ws"
         fi
-    else
-        echo "✗ Plan failed for workspace: $workspace_name"
-        exit 1
-    fi
-  timeout: 600s
-
-- id: summarize-dev-plan
-  name: ghcr.io/dineshba/tf-summarize:latest
-  waitFor:
-  - plan-dev
-  entrypoint: /bin/sh
-  args:
-  - -c
-  - |
-    json_file="/workspace/tfplan_dev.json"
-    if [ -f "$json_file" ]; then
-        echo "=== Plan Summary: dev ==="
-        tf-summarize "$json_file"
-        echo "========================="
-    else
-        echo "No changes detected for dev"
-    fi
-  timeout: 120s
-
-###################
-# STAGING WORKSPACE - PLAN
-###################
-
-- id: setup-staging-plan
-  name: hashicorp/terraform:1.14
-  entrypoint: /bin/sh
-  waitFor:
-  - plan-dev
-  args:
-  - -c
-  - |
-    workspace_name="staging"
-    echo "Selecting workspace: $workspace_name"
-    terraform workspace select $workspace_name || terraform workspace new $workspace_name
-    terraform workspace show
-  timeout: 300s
-
-- id: plan-staging
-  name: hashicorp/terraform:1.14
-  entrypoint: /bin/sh
-  waitFor:
-  - setup-staging-plan
-  args:
-  - -c
-  - |
-    set -euo pipefail
-    workspace_name="staging"
-    plan_output="/workspace/plan_${workspace_name}.txt"
-
-    echo "================================"
-    echo "PLANNING workspace: $workspace_name"
-    echo "================================"
-
-    terraform workspace select $workspace_name
-
-    # Run plan and capture output
-    if terraform plan -no-color -out=/workspace/tfplan_${workspace_name} | tee "$plan_output"; then
-        echo ""
-        echo "✓ Plan successful for workspace: $workspace_name"
-
-        # Check if there are changes
-        if grep -q "No changes" "$plan_output"; then
-            echo "STATUS: No changes detected"
-        else
-            echo "STATUS: Changes detected"
-            terraform show -json /workspace/tfplan_${workspace_name} > /workspace/tfplan_${workspace_name}.json
-        fi
-    else
-        echo "✗ Plan failed for workspace: $workspace_name"
-        exit 1
-    fi
-  timeout: 600s
-
-- id: summarize-staging-plan
-  name: ghcr.io/dineshba/tf-summarize:latest
-  waitFor:
-  - plan-staging
-  entrypoint: /bin/sh
-  args:
-  - -c
-  - |
-    json_file="/workspace/tfplan_staging.json"
-    if [ -f "$json_file" ]; then
-        echo "=== Plan Summary: staging ==="
-        tf-summarize "$json_file"
-        echo "============================="
-    else
-        echo "No changes detected for staging"
-    fi
+    done
   timeout: 120s
 
 ###################
@@ -247,12 +95,10 @@ steps:
 ###################
 
 - id: generate-summary
-  name: alpine:3.18
+  name: alpine:3.21
   entrypoint: /bin/sh
   waitFor:
-  - summarize-gitops-plan
-  - summarize-dev-plan
-  - summarize-staging-plan
+  - summarize-all
   args:
   - -c
   - |
@@ -260,14 +106,13 @@ steps:
     echo "Plan Summary"
     echo "================================"
 
-    for workspace in gitops dev staging; do
-        plan_file="/workspace/plan_${workspace}.txt"
+    for ws in ${_WORKSPACES}; do
+        plan_file="/workspace/plan_${ws}.txt"
 
         echo ""
-        echo "--- Workspace: $workspace ---"
+        echo "--- Workspace: $ws ---"
 
         if [ -f "$plan_file" ]; then
-            # Extract summary line
             if grep -q "No changes" "$plan_file"; then
                 echo "✓ No changes"
             elif grep -q "Plan:" "$plan_file"; then
@@ -292,5 +137,9 @@ options:
 
 substitutions:
   _PR_NUMBER: ""
+  # Space-separated list of workspaces to plan, in order.
+  # gitops must be first (it owns the shared network).
+  # To add a new environment, add its workspace name here.
+  _WORKSPACES: gitops dev staging
 
 timeout: 2400s
