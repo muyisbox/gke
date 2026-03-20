@@ -145,7 +145,17 @@ resource "kubectl_manifest" "argocd_external_secret" {
           data = {
             name   = "{{ .name }}"
             server = "https://{{ .endpoint }}"
-            config = "{\"execProviderConfig\":{\"command\":\"argocd-k8s-auth\",\"args\":[\"gcp\"],\"apiVersion\":\"client.authentication.k8s.io/v1beta1\"},\"tlsClientConfig\":{\"insecure\":false,\"caData\":\"{{ .ca_cert }}\"}}"
+            config = jsonencode({
+              execProviderConfig = {
+                command    = "argocd-k8s-auth"
+                args       = ["gcp"]
+                apiVersion = "client.authentication.k8s.io/v1beta1"
+              }
+              tlsClientConfig = {
+                insecure = false
+                caData   = "{{ .ca_cert }}"
+              }
+            })
           }
         }
       }
