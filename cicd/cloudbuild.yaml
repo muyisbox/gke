@@ -17,7 +17,7 @@ steps:
   timeout: 60s
 
 # Security Scanning Steps
-- name: aquasec/trivy:latest
+- name: ghcr.io/aquasecurity/trivy:latest
   id: trivy-fs-scan
   entrypoint: trivy
   args:
@@ -35,7 +35,7 @@ steps:
   - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
   timeout: 300s
 
-- name: aquasec/trivy:latest
+- name: ghcr.io/aquasecurity/trivy:latest
   id: trivy-config-scan
   entrypoint: trivy
   args:

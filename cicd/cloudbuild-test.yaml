@@ -23,7 +23,7 @@ steps:
   timeout: 60s
 
 # Test Trivy filesystem scan
-- name: aquasec/trivy:latest
+- name: ghcr.io/aquasecurity/trivy:latest
   id: trivy-fs-scan
   entrypoint: trivy
   args:
@@ -40,7 +40,7 @@ steps:
   timeout: 300s
 
 # Test Trivy config scan
-- name: aquasec/trivy:latest
+- name: ghcr.io/aquasecurity/trivy:latest
   id: trivy-config-scan
   entrypoint: trivy
   args:
