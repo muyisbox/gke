@@ -24,7 +24,7 @@ helm:
           type: loki
           jsonData:
             tlsSkipVerify: true
-          url: http://loki-stack.logging.svc.cluster.local:3100
+          url: http://loki.logging.svc.cluster.local:3100
           version: 1
     prometheus:
       prometheusSpec:
