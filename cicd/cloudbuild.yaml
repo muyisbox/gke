@@ -17,7 +17,7 @@ steps:
   timeout: 60s
 
 # Security Scanning Steps
-- name: aquasec/trivy:latest
+- name: ghcr.io/aquasecurity/trivy:latest
   id: trivy-fs-scan
   entrypoint: trivy
   args:
@@ -35,7 +35,7 @@ steps:
   - 'TRIVY_CACHE_DIR=/workspace/.trivy-cache'
   timeout: 300s
 
-- name: aquasec/trivy:latest
+- name: ghcr.io/aquasecurity/trivy:latest
   id: trivy-config-scan
   entrypoint: trivy
   args:
@@ -159,7 +159,10 @@ steps:
         case $plan_exit_code in
             0) echo "No changes detected" ;;
             1) echo "Plan failed"; exit 1 ;;
-            2) echo "Plan succeeded with changes" ;;
+            2)
+                echo "Plan succeeded with changes"
+                terraform show -json "$plan_file" > "${plan_file}.json"
+                ;;
         esac
         exit 0
     else
@@ -167,10 +170,28 @@ steps:
     fi
   timeout: 1200s
 
+- id: summarize-gitops
+  name: ghcr.io/dineshba/tf-summarize:latest
+  waitFor:
+  - plan-gitops
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    json_file="/workspace/$BUILD_ID/tfplan_gitops.json"
+    if [ -f "$json_file" ]; then
+        echo "=== Plan Summary: gitops ==="
+        tf-summarize "$json_file"
+        echo "============================"
+    else
+        echo "No changes detected for gitops"
+    fi
+  timeout: 120s
+
 - id: apply-gitops
   name: hashicorp/terraform:1.14
   waitFor:
-  - plan-gitops
+  - summarize-gitops
   entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
@@ -263,7 +284,10 @@ steps:
         case $plan_exit_code in
             0) echo "No changes detected" ;;
             1) echo "Plan failed"; exit 1 ;;
-            2) echo "Plan succeeded with changes" ;;
+            2)
+                echo "Plan succeeded with changes"
+                terraform show -json "$plan_file" > "${plan_file}.json"
+                ;;
         esac
         exit 0
     else
@@ -271,10 +295,28 @@ steps:
     fi
   timeout: 1200s
 
+- id: summarize-dev
+  name: ghcr.io/dineshba/tf-summarize:latest
+  waitFor:
+  - plan-dev
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    json_file="/workspace/$BUILD_ID/tfplan_dev.json"
+    if [ -f "$json_file" ]; then
+        echo "=== Plan Summary: dev ==="
+        tf-summarize "$json_file"
+        echo "========================="
+    else
+        echo "No changes detected for dev"
+    fi
+  timeout: 120s
+
 - id: apply-dev
   name: hashicorp/terraform:1.14
   waitFor:
-  - plan-dev
+  - summarize-dev
   entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS
@@ -367,7 +409,10 @@ steps:
         case $plan_exit_code in
             0) echo "No changes detected" ;;
             1) echo "Plan failed"; exit 1 ;;
-            2) echo "Plan succeeded with changes" ;;
+            2)
+                echo "Plan succeeded with changes"
+                terraform show -json "$plan_file" > "${plan_file}.json"
+                ;;
         esac
         exit 0
     else
@@ -375,10 +420,28 @@ steps:
     fi
   timeout: 1200s
 
+- id: summarize-staging
+  name: ghcr.io/dineshba/tf-summarize:latest
+  waitFor:
+  - plan-staging
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    json_file="/workspace/$BUILD_ID/tfplan_staging.json"
+    if [ -f "$json_file" ]; then
+        echo "=== Plan Summary: staging ==="
+        tf-summarize "$json_file"
+        echo "============================="
+    else
+        echo "No changes detected for staging"
+    fi
+  timeout: 120s
+
 - id: apply-staging
   name: hashicorp/terraform:1.14
   waitFor:
-  - plan-staging
+  - summarize-staging
   entrypoint: /bin/sh
   secretEnv:
   - GOOGLE_CREDENTIALS

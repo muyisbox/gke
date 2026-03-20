@@ -72,12 +72,31 @@ steps:
             echo "STATUS: No changes detected"
         else
             echo "STATUS: Changes detected"
+            terraform show -json /workspace/tfplan_${workspace_name} > /workspace/tfplan_${workspace_name}.json
         fi
     else
         echo "✗ Plan failed for workspace: $workspace_name"
         exit 1
     fi
   timeout: 600s
+
+- id: summarize-gitops-plan
+  name: ghcr.io/dineshba/tf-summarize:latest
+  waitFor:
+  - plan-gitops
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    json_file="/workspace/tfplan_gitops.json"
+    if [ -f "$json_file" ]; then
+        echo "=== Plan Summary: gitops ==="
+        tf-summarize "$json_file"
+        echo "============================"
+    else
+        echo "No changes detected for gitops"
+    fi
+  timeout: 120s
 
 ###################
 # DEV WORKSPACE - PLAN
@@ -125,12 +144,31 @@ steps:
             echo "STATUS: No changes detected"
         else
             echo "STATUS: Changes detected"
+            terraform show -json /workspace/tfplan_${workspace_name} > /workspace/tfplan_${workspace_name}.json
         fi
     else
         echo "✗ Plan failed for workspace: $workspace_name"
         exit 1
     fi
   timeout: 600s
+
+- id: summarize-dev-plan
+  name: ghcr.io/dineshba/tf-summarize:latest
+  waitFor:
+  - plan-dev
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    json_file="/workspace/tfplan_dev.json"
+    if [ -f "$json_file" ]; then
+        echo "=== Plan Summary: dev ==="
+        tf-summarize "$json_file"
+        echo "========================="
+    else
+        echo "No changes detected for dev"
+    fi
+  timeout: 120s
 
 ###################
 # STAGING WORKSPACE - PLAN
@@ -178,12 +216,31 @@ steps:
             echo "STATUS: No changes detected"
         else
             echo "STATUS: Changes detected"
+            terraform show -json /workspace/tfplan_${workspace_name} > /workspace/tfplan_${workspace_name}.json
         fi
     else
         echo "✗ Plan failed for workspace: $workspace_name"
         exit 1
     fi
   timeout: 600s
+
+- id: summarize-staging-plan
+  name: ghcr.io/dineshba/tf-summarize:latest
+  waitFor:
+  - plan-staging
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    json_file="/workspace/tfplan_staging.json"
+    if [ -f "$json_file" ]; then
+        echo "=== Plan Summary: staging ==="
+        tf-summarize "$json_file"
+        echo "============================="
+    else
+        echo "No changes detected for staging"
+    fi
+  timeout: 120s
 
 ###################
 # SUMMARY & PR COMMENT
@@ -193,9 +250,9 @@ steps:
   name: alpine:3.18
   entrypoint: /bin/sh
   waitFor:
-  - plan-gitops
-  - plan-dev
-  - plan-staging
+  - summarize-gitops-plan
+  - summarize-dev-plan
+  - summarize-staging-plan
   args:
   - -c
   - |

@@ -27,6 +27,8 @@ module "gke" {
     gpu_resources       = []
     auto_repair         = true
     auto_upgrade        = true
+    disk_size           = 30
+    disk_type           = "pd-standard"
   }
 
   node_pools = [
