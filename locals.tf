@@ -1,11 +1,9 @@
 locals {
-  cluster_types = toset(["gitops", "dev", "staging"])
-  # Master CIDR offsets for different environments
-  master_cidr_offsets = {
-    dev     = "0"
-    staging = "1"
-    gitops  = "2"
-  }
+  # All non-gitops workspaces — used to discover remote clusters for ArgoCD
+  remote_workspaces = [for env in keys(var.environments) : env if env != "gitops"]
+
+  # Derived lookups
+  master_cidr_offsets = { for env, cfg in var.environments : env => tostring(cfg.master_cidr_offset) }
   # Shared network name - gitops creates, others reference via data source
   shared_network_name = terraform.workspace == "gitops" ? module.shared-network[0].network_name : data.google_compute_network.shared_network[0].name
 

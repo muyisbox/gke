@@ -1,6 +1,6 @@
 steps:
 # Environment info step - test basic functionality
-- name: alpine:3.18
+- name: alpine:3.21
   id: environment-info
   entrypoint: /bin/sh
   args:
@@ -92,7 +92,7 @@ steps:
   timeout: 300s
 
 # Summary step
-- name: alpine:3.18
+- name: alpine:3.21
   id: test-summary
   entrypoint: /bin/sh
   args:

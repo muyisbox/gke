@@ -85,7 +85,7 @@ data "http" "gke_clusters" {
 # Remote clusters - only looked up if they actually exist
 data "google_container_cluster" "remote" {
   for_each = terraform.workspace == "gitops" ? toset([
-    for name in ["dev", "staging"] : name
+    for name in local.remote_workspaces : name
     if can(regex("\"${name}-cluster\"", try(data.http.gke_clusters[0].response_body, "")))
   ]) : toset([])
 

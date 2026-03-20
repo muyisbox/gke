@@ -13,58 +13,24 @@ module "shared-network" {
   network_name = "shared-gke-network"
 
   subnets = [
-    # Dev environment subnet
-    {
-      subnet_name           = "gke-subnet-dev"
-      subnet_ip            = "10.10.0.0/17"
-      subnet_region        = var.region
-      subnet_private_access = "true"
-    },
-    # Staging environment subnet
-    {
-      subnet_name           = "gke-subnet-staging"
-      subnet_ip            = "10.20.0.0/17"
-      subnet_region        = var.region
-      subnet_private_access = "true"
-    },
-    # GitOps environment subnet
-    {
-      subnet_name           = "gke-subnet-gitops"
-      subnet_ip            = "10.30.0.0/17"
-      subnet_region        = var.region
+    for env, cfg in var.environments : {
+      subnet_name           = "gke-subnet-${env}"
+      subnet_ip             = cfg.node_cidr
+      subnet_region         = var.region
       subnet_private_access = "true"
     }
   ]
 
   secondary_ranges = {
-    "gke-subnet-dev" = [
+    for env, cfg in var.environments :
+    "gke-subnet-${env}" => [
       {
-        range_name    = "dev-pods"
-        ip_cidr_range = "172.16.0.0/18"
+        range_name    = "${env}-pods"
+        ip_cidr_range = cidrsubnet(cfg.range_base, 1, 0)
       },
       {
-        range_name    = "dev-services"
-        ip_cidr_range = "172.16.64.0/18"
-      },
-    ]
-    "gke-subnet-staging" = [
-      {
-        range_name    = "staging-pods"
-        ip_cidr_range = "172.17.0.0/18"
-      },
-      {
-        range_name    = "staging-services"
-        ip_cidr_range = "172.17.64.0/18"
-      },
-    ]
-    "gke-subnet-gitops" = [
-      {
-        range_name    = "gitops-pods"
-        ip_cidr_range = "172.18.0.0/18"
-      },
-      {
-        range_name    = "gitops-services"
-        ip_cidr_range = "172.18.64.0/18"
+        range_name    = "${env}-services"
+        ip_cidr_range = cidrsubnet(cfg.range_base, 1, 1)
       },
     ]
   }
@@ -100,14 +66,4 @@ resource "google_compute_router_nat" "shared_nat" {
     enable = true
     filter = "ERRORS_ONLY"
   }
-
-  # Optional: Reserve static NAT IPs for better IP allowlisting
-  # nat_ips = [google_compute_address.nat_ip.self_link]
 }
-
-# Optional: Static NAT IP for consistent outbound IP
-# resource "google_compute_address" "nat_ip" {
-#   project = var.project_id
-#   name    = "shared-nat-ip"
-#   region  = var.region
-# }
