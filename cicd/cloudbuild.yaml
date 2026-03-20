@@ -181,7 +181,7 @@ steps:
     json_file="/workspace/$BUILD_ID/tfplan_gitops.json"
     if [ -f "$json_file" ]; then
         echo "=== Plan Summary: gitops ==="
-        tf-summarize -tree "$json_file"
+        tf-summarize "$json_file"
         echo "============================"
     else
         echo "No changes detected for gitops"
@@ -306,7 +306,7 @@ steps:
     json_file="/workspace/$BUILD_ID/tfplan_dev.json"
     if [ -f "$json_file" ]; then
         echo "=== Plan Summary: dev ==="
-        tf-summarize -tree "$json_file"
+        tf-summarize "$json_file"
         echo "========================="
     else
         echo "No changes detected for dev"
@@ -431,7 +431,7 @@ steps:
     json_file="/workspace/$BUILD_ID/tfplan_staging.json"
     if [ -f "$json_file" ]; then
         echo "=== Plan Summary: staging ==="
-        tf-summarize -tree "$json_file"
+        tf-summarize "$json_file"
         echo "============================="
     else
         echo "No changes detected for staging"
