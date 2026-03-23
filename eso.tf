@@ -65,17 +65,17 @@ data "http" "eso_crd_externalsecrets" {
 }
 
 resource "kubectl_manifest" "eso_crd_clustersecretstores" {
-  count            = terraform.workspace == "gitops" ? 1 : 0
-  yaml_body        = data.http.eso_crd_clustersecretstores[0].response_body
+  count             = terraform.workspace == "gitops" ? 1 : 0
+  yaml_body         = data.http.eso_crd_clustersecretstores[0].response_body
   server_side_apply = true
-  depends_on       = [module.gke]
+  depends_on        = [module.gke]
 }
 
 resource "kubectl_manifest" "eso_crd_externalsecrets" {
-  count            = terraform.workspace == "gitops" ? 1 : 0
-  yaml_body        = data.http.eso_crd_externalsecrets[0].response_body
+  count             = terraform.workspace == "gitops" ? 1 : 0
+  yaml_body         = data.http.eso_crd_externalsecrets[0].response_body
   server_side_apply = true
-  depends_on       = [module.gke]
+  depends_on        = [module.gke]
 }
 
 # ClusterSecretStore: ESO backend pointing to GCP Secret Manager via WI

@@ -18,40 +18,21 @@ module "gke" {
   filestore_csi_driver       = false
   release_channel            = "REGULAR"
   cluster_autoscaling = {
-    enabled             = true
-    autoscaling_profile = "OPTIMIZE_UTILIZATION"
-    min_cpu_cores       = 0
-    max_cpu_cores       = 48
-    min_memory_gb       = 0
-    max_memory_gb       = 192
-    gpu_resources       = []
-    auto_repair         = true
-    auto_upgrade        = true
-    disk_size           = 30
-    disk_type           = "pd-standard"
+    enabled                      = true
+    enable_default_compute_class = true
+    autoscaling_profile          = "OPTIMIZE_UTILIZATION"
+    min_cpu_cores                = 0
+    max_cpu_cores                = 48
+    min_memory_gb                = 0
+    max_memory_gb                = 192
+    gpu_resources                = []
+    auto_repair                  = true
+    auto_upgrade                 = true
+    disk_size                    = 30
+    disk_type                    = "pd-standard"
   }
 
-  node_pools = [
-    {
-      name               = "node-pool-01"
-      machine_type       = "e2-standard-4"
-      node_locations     = "us-central1-c,us-central1-f"
-      min_count          = 1
-      max_count          = 4
-      local_ssd_count    = 0
-      spot               = false
-      disk_size_gb       = 30
-      disk_type          = "pd-ssd"
-      image_type         = "COS_CONTAINERD"
-      enable_gcfs        = false
-      enable_gvnic       = false
-      auto_repair        = true
-      auto_upgrade       = true
-      service_account    = ""
-      preemptible        = false
-      initial_node_count = 1
-    },
-  ]
+  node_pools = []
 
   node_pools_oauth_scopes = {
     all = [
@@ -64,38 +45,18 @@ module "gke" {
 
   node_pools_labels = {
     all = {}
-
-    default-node-pool = {
-      default-node-pool = true
-    }
   }
 
   node_pools_metadata = {
     all = {}
-
-    default-node-pool = {
-      node-pool-metadata-custom-value = "my-node-pool"
-    }
   }
 
   node_pools_taints = {
     all = []
-
-    default-node-pool = [
-      {
-        key    = "default-node-pool"
-        value  = true
-        effect = "PREFER_NO_SCHEDULE"
-      },
-    ]
   }
 
   node_pools_tags = {
     all = []
-
-    default-node-pool = [
-      "default-node-pool",
-    ]
   }
 }
 

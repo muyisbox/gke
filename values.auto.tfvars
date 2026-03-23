@@ -1,6 +1,6 @@
 # Project Configuration
-project_id                     = "cluster-dreams"                         # Replace with your actual GCP project ID
-compute_engine_service_account = "create"                                 # Creates a new service account for the nodes
+project_id                     = "cluster-dreams" # Replace with your actual GCP project ID
+compute_engine_service_account = "create"         # Creates a new service account for the nodes
 
 # Cluster Configuration
 # Defines basic properties of the GKE cluster including names and location.
