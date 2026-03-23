@@ -71,7 +71,6 @@ projects:
     destinations:
     - name: ${cluster_name}-cluster
       namespace: '*'
-      server: https://${cluster.endpoint}
     namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
