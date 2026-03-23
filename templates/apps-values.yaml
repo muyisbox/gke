@@ -37,6 +37,9 @@ applicationsets:
           syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+          managedNamespaceMetadata:
+            labels:
+              istio.io/revy: stable
     syncPolicy:
       applicationsSync: sync
     goTemplate: true
@@ -71,7 +74,6 @@ projects:
     destinations:
     - name: ${cluster_name}-cluster
       namespace: '*'
-      server: https://${cluster.endpoint}
     namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
