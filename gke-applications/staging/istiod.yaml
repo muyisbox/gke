@@ -10,6 +10,6 @@ helm:
       autoscaleEnabled: true
       autoscaleMin: 2
       autoscaleMax: 4
-    revision: "1-21"
+    revision: "1-29"
     revisionTags:
       - stable
