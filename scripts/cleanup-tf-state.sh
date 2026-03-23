@@ -54,18 +54,26 @@ remove_resources() {
         return 0
     fi
 
-    # Remove resources one by one (compatible with macOS bash)
-    echo "${RESOURCES}" | while IFS= read -r resource; do
-        if [[ -n "${resource}" ]]; then
-            echo -e "${YELLOW}Removing:${NC} ${resource}"
-            if terraform -chdir="${PROJECT_DIR}" state rm "${resource}" 2>/dev/null; then
-                echo -e "${GREEN}  Removed:${NC} ${resource}"
-            else
-                echo -e "${RED}  Failed:${NC} ${resource}"
+    # Try batch removal first
+    readarray -t RESOURCE_ARRAY <<< "$RESOURCES"
+
+    if terraform -chdir="$PROJECT_DIR" state rm "${RESOURCE_ARRAY[@]}" 2>/dev/null; then
+        echo -e "${GREEN}Removed all $TOTAL resources from ${WORKSPACE}${NC}"
+    else
+        echo -e "${YELLOW}Batch removal failed, falling back to individual removal...${NC}"
+        local REMOVED=0
+        for resource in "${RESOURCE_ARRAY[@]}"; do
+            if [ -n "$resource" ]; then
+                if terraform -chdir="$PROJECT_DIR" state rm "$resource" 2>/dev/null; then
+                    echo -e "${GREEN}  Removed:${NC} $resource"
+                    ((REMOVED++))
+                else
+                    echo -e "${RED}  Failed:${NC} $resource"
+                fi
             fi
-        fi
-    done
-    echo -e "${GREEN}Done processing ${TOTAL} resources from ${WORKSPACE}${NC}"
+        done
+        echo -e "${GREEN}Removed $REMOVED/$TOTAL resources from ${WORKSPACE}${NC}"
+    fi
 }
 
 main() {
