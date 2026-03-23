@@ -6,7 +6,7 @@ namespace: istio-gateways
 cluster_env: dev
 helm:
   values:
-    revision: "1-21"
+    revision: "1-29"
     autoscaling:
       enabled: true
       minReplicas: 2
