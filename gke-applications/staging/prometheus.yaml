@@ -6,6 +6,8 @@ namespace: monitoring
 cluster_env: staging
 helm:
   values:
+    externalLabels:
+      cluster: staging_cluster
     alertmanager:
       alertmanagerSpec:
         replicas: 2
