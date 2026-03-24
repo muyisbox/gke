@@ -6,6 +6,8 @@ namespace: monitoring
 cluster_env: gitops
 helm:
   values:
+    externalLabels:
+      cluster: gitops_cluster
     alertmanager:
       alertmanagerSpec:
         replicas: 2

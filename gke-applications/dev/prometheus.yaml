@@ -6,6 +6,8 @@ namespace: monitoring
 cluster_env: dev
 helm:
   values:
+    externalLabels:
+      cluster: dev_cluster
     alertmanager:
       alertmanagerSpec:
         replicas: 2
