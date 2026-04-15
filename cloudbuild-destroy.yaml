@@ -1,0 +1,163 @@
+steps:
+# Environment Info
+- name: alpine:3.18
+  id: environment-info
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "=== Scheduled Destroy - All Workspaces ==="
+    echo "Build ID: $BUILD_ID"
+    echo "Triggered at: $(date)"
+    echo "Workspaces to destroy: dev, staging, gitops"
+    echo "Order: dev -> staging -> gitops (network last)"
+    echo "============================================"
+  timeout: 60s
+
+# Terraform Init (shared)
+- id: terraform-init
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    set -e
+    terraform init -backend-config="prefix=terraform/state"
+  timeout: 300s
+
+###################
+# DEV WORKSPACE - DESTROY (first)
+###################
+
+- id: destroy-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - terraform-init
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="dev"
+    echo "================================"
+    echo "DESTROYING workspace: $workspace_name"
+    echo "Creating state backup before destroy..."
+    echo "================================"
+
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+
+    if terraform state pull > /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate 2>/dev/null; then
+        echo "State backup created"
+
+        echo "Starting destroy operation..."
+        if terraform destroy -auto-approve; then
+            echo "Successfully destroyed workspace: $workspace_name"
+        else
+            echo "ERROR: Failed to destroy workspace: $workspace_name"
+            echo "Backup available at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
+            exit 1
+        fi
+    else
+        echo "No state found for workspace: $workspace_name - skipping"
+    fi
+  timeout: 1800s
+
+###################
+# STAGING WORKSPACE - DESTROY (second)
+###################
+
+- id: destroy-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - destroy-dev
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="staging"
+    echo "================================"
+    echo "DESTROYING workspace: $workspace_name"
+    echo "Creating state backup before destroy..."
+    echo "================================"
+
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+
+    if terraform state pull > /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate 2>/dev/null; then
+        echo "State backup created"
+
+        echo "Starting destroy operation..."
+        if terraform destroy -auto-approve; then
+            echo "Successfully destroyed workspace: $workspace_name"
+        else
+            echo "ERROR: Failed to destroy workspace: $workspace_name"
+            echo "Backup available at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
+            exit 1
+        fi
+    else
+        echo "No state found for workspace: $workspace_name - skipping"
+    fi
+  timeout: 1800s
+
+###################
+# GITOPS WORKSPACE - DESTROY (last - manages shared network)
+###################
+
+- id: destroy-gitops
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - destroy-staging
+  args:
+  - -c
+  - |
+    set -euo pipefail
+
+    workspace_name="gitops"
+    echo "================================"
+    echo "DESTROYING workspace: $workspace_name"
+    echo "NOTE: This workspace manages the shared network"
+    echo "Creating state backup before destroy..."
+    echo "================================"
+
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+
+    if terraform state pull > /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate 2>/dev/null; then
+        echo "State backup created"
+
+        echo "Starting destroy operation..."
+        if terraform destroy -auto-approve; then
+            echo "Successfully destroyed workspace: $workspace_name"
+        else
+            echo "ERROR: Failed to destroy workspace: $workspace_name"
+            echo "Backup available at: /tmp/terraform_${workspace_name}_predestroy_${BUILD_ID}.tfstate"
+            exit 1
+        fi
+    else
+        echo "No state found for workspace: $workspace_name - skipping"
+    fi
+  timeout: 1800s
+
+# Summary
+- name: alpine:3.18
+  id: destroy-summary
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "================================"
+    echo "Scheduled Destroy Complete"
+    echo "Destroyed: dev, staging, gitops"
+    echo "Shared network: DESTROYED"
+    echo "Completed at: $(date)"
+    echo "Next recreation: Monday 10 AM EST"
+    echo "================================"
+  timeout: 60s
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 7200s

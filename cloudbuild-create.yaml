@@ -1,0 +1,238 @@
+steps:
+# Environment Info
+- name: alpine:3.18
+  id: environment-info
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "=== Weekly Recreation - All Workspaces ==="
+    echo "Build ID: $BUILD_ID"
+    echo "Triggered at: $(date)"
+    echo "Workspaces to create: gitops, dev, staging"
+    echo "Order: gitops (network first) -> dev -> staging"
+    echo "============================================"
+  timeout: 60s
+
+# Terraform Init (shared)
+- id: terraform-init
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    set -e
+    terraform init -backend-config="prefix=terraform/state"
+  timeout: 300s
+
+###################
+# GITOPS WORKSPACE - CREATE (first - creates shared network)
+###################
+
+- id: setup-gitops
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - terraform-init
+  args:
+  - -c
+  - |
+    workspace_name="gitops"
+    echo "Selecting workspace: $workspace_name"
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+    terraform workspace show
+  timeout: 300s
+
+- id: plan-gitops
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - setup-gitops
+  args:
+  - -c
+  - |
+    set -euo pipefail
+    workspace_name="gitops"
+    plan_file="/workspace/$BUILD_ID/tfplan_gitops"
+
+    echo "Creating plan for workspace: $workspace_name"
+    mkdir -p "/workspace/$BUILD_ID"
+    terraform workspace select $workspace_name
+    terraform plan -out="$plan_file"
+    echo "Plan created: $plan_file"
+  timeout: 600s
+
+- id: apply-gitops
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - plan-gitops
+  args:
+  - -c
+  - |
+    set -euo pipefail
+    workspace_name="gitops"
+    plan_file="/workspace/$BUILD_ID/tfplan_gitops"
+
+    echo "================================"
+    echo "Applying workspace: $workspace_name"
+    echo "NOTE: Creates shared network first"
+    echo "================================"
+
+    terraform workspace select $workspace_name
+
+    if terraform apply "$plan_file"; then
+        echo "Successfully applied workspace: $workspace_name"
+    else
+        echo "ERROR: Apply failed for workspace: $workspace_name"
+        exit 1
+    fi
+  timeout: 1800s
+
+###################
+# DEV WORKSPACE - CREATE (second)
+###################
+
+- id: setup-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - apply-gitops
+  args:
+  - -c
+  - |
+    workspace_name="dev"
+    echo "Selecting workspace: $workspace_name"
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+    terraform workspace show
+  timeout: 300s
+
+- id: plan-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - setup-dev
+  args:
+  - -c
+  - |
+    set -euo pipefail
+    workspace_name="dev"
+    plan_file="/workspace/$BUILD_ID/tfplan_dev"
+
+    echo "Creating plan for workspace: $workspace_name"
+    mkdir -p "/workspace/$BUILD_ID"
+    terraform workspace select $workspace_name
+    terraform plan -out="$plan_file"
+    echo "Plan created: $plan_file"
+  timeout: 600s
+
+- id: apply-dev
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - plan-dev
+  args:
+  - -c
+  - |
+    set -euo pipefail
+    workspace_name="dev"
+    plan_file="/workspace/$BUILD_ID/tfplan_dev"
+
+    echo "================================"
+    echo "Applying workspace: $workspace_name"
+    echo "================================"
+
+    terraform workspace select $workspace_name
+
+    if terraform apply "$plan_file"; then
+        echo "Successfully applied workspace: $workspace_name"
+    else
+        echo "ERROR: Apply failed for workspace: $workspace_name"
+        exit 1
+    fi
+  timeout: 1800s
+
+###################
+# STAGING WORKSPACE - CREATE (third)
+###################
+
+- id: setup-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - apply-dev
+  args:
+  - -c
+  - |
+    workspace_name="staging"
+    echo "Selecting workspace: $workspace_name"
+    terraform workspace select $workspace_name || terraform workspace new $workspace_name
+    terraform workspace show
+  timeout: 300s
+
+- id: plan-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - setup-staging
+  args:
+  - -c
+  - |
+    set -euo pipefail
+    workspace_name="staging"
+    plan_file="/workspace/$BUILD_ID/tfplan_staging"
+
+    echo "Creating plan for workspace: $workspace_name"
+    mkdir -p "/workspace/$BUILD_ID"
+    terraform workspace select $workspace_name
+    terraform plan -out="$plan_file"
+    echo "Plan created: $plan_file"
+  timeout: 600s
+
+- id: apply-staging
+  name: hashicorp/terraform:1.11
+  entrypoint: /bin/sh
+  waitFor:
+  - plan-staging
+  args:
+  - -c
+  - |
+    set -euo pipefail
+    workspace_name="staging"
+    plan_file="/workspace/$BUILD_ID/tfplan_staging"
+
+    echo "================================"
+    echo "Applying workspace: $workspace_name"
+    echo "================================"
+
+    terraform workspace select $workspace_name
+
+    if terraform apply "$plan_file"; then
+        echo "Successfully applied workspace: $workspace_name"
+    else
+        echo "ERROR: Apply failed for workspace: $workspace_name"
+        exit 1
+    fi
+  timeout: 1800s
+
+# Summary
+- name: alpine:3.18
+  id: create-summary
+  entrypoint: /bin/sh
+  args:
+  - -c
+  - |
+    echo "================================"
+    echo "Weekly Recreation Complete"
+    echo "Recreated: gitops, dev, staging"
+    echo "Shared network: CREATED (by gitops)"
+    echo "Completed at: $(date)"
+    echo "Next destroy: Tonight 2 AM EST"
+    echo "================================"
+  timeout: 60s
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 7200s
