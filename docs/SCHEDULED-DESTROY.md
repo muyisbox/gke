@@ -1,22 +1,23 @@
 # Scheduled Destroy & Recreate
 
-Automatically destroy and recreate dev/staging workspaces to save costs during off-hours.
+Automatically destroy all workspaces nightly and recreate weekly to save costs.
 
 ## 📅 Schedule
 
 | Action | Time | Workspaces | Frequency |
 |--------|------|------------|-----------|
-| **Destroy** | 2 AM EST | dev, staging | Daily |
-| **Recreate** | 10 AM EST | dev, staging | Daily |
+| **Destroy** | 2 AM EST | dev, staging, gitops | Every night |
+| **Recreate** | 10 AM EST | gitops, dev, staging | Monday only |
 
-**GitOps workspace**: Always running (manages shared network)
+**Destroy order**: dev → staging → gitops (network destroyed last)
+**Recreate order**: gitops → dev → staging (network created first)
 
 ## 💰 Cost Savings
 
-- **Dev cluster**: ~16 hours/day offline = 480 hours/month saved
-- **Staging cluster**: ~16 hours/day offline = 480 hours/month saved
-- **Total**: ~960 cluster-hours/month saved
-- **Estimated savings**: $200-400/month (depending on cluster size)
+- **All 3 clusters offline**: Mon night through next Mon morning
+- **Only online**: Monday 10 AM → Tuesday 2 AM (~16 hours/week)
+- **Offline**: ~152 hours/week
+- **Estimated savings**: $500-800/month (depending on cluster size)
 
 ## 🔧 Setup Instructions
 
