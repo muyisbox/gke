@@ -3,11 +3,17 @@ apps:
     url: https://prometheus-community.github.io/helm-charts
     namespace: monitoring
     chart: kube-prometheus-stack
-    version: 57.2.0
+    version: 80.4.1
     values: 
       alertmanager:
         alertmanagerSpec:
           replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              memory: 500Mi
           storageSpec:
             volumeClaimTemplate:
               spec:
@@ -15,6 +21,12 @@ apps:
                   requests:
                     storage: 5Gi
       grafana:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            memory: 500Mi
         additionalDataSources:
           - name: Loki
             access: proxy
@@ -27,6 +39,12 @@ apps:
       prometheus:
         prometheusSpec:
           replicas: 2
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 2Gi
           storageSpec:
             volumeClaimTemplate:
               spec:
@@ -35,6 +53,12 @@ apps:
                     storage: 10Gi
       prometheusOperator:
         enabled: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            memory: 500Mi
         admissionWebhooks:
           patch:
             podAnnotations:
@@ -44,10 +68,32 @@ apps:
     url: https://charts.fairwinds.com/stable
     namespace: vpa
     chart: vpa
-    version: 4.4.6
+    version: 4.10.0
     values:
       podLabels:
         sidecar.istio.io/inject: "false"
+      recommender:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 200Mi
+          limits:
+            memory: 500Mi
+      updater:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 200Mi
+          limits:
+            memory: 500Mi
+      admissionController:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 200Mi
+          limits:
+            memory: 500Mi
+
   bookinfo:
     url: https://charts.fairwinds.com/stable
     namespace: bookinfo
@@ -57,5 +103,27 @@ apps:
     url: https://charts.jetstack.io
     namespace: cert-manager
     chart: cert-manager
-    version: 1.14.5
+    version: 1.19.2
     disable_istio: true
+    values:
+      installCRDs: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 200Mi
+        limits:
+          memory: 500Mi
+      webhook:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 100Mi
+          limits:
+            memory: 200Mi
+      cainjector:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            memory: 500Mi
