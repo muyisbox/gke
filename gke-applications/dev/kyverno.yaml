@@ -1,0 +1,24 @@
+name: kyverno
+chart: kyverno
+repoURL: https://kyverno.github.io/kyverno
+targetRevision: "3.3.7"
+namespace: kyverno
+cluster_env: dev
+helm:
+  values:
+    admissionController:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+    backgroundController:
+      enabled: true
+    cleanupController:
+      enabled: true
+    reportsController:
+      enabled: true
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: prometheus-monitoring

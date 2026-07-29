@@ -1,0 +1,36 @@
+name: velero
+chart: velero
+repoURL: https://vmware-tanzu.github.io/helm-charts
+targetRevision: "8.1.0"
+namespace: velero
+cluster_env: staging
+helm:
+  values:
+    configuration:
+      backupStorageLocation:
+        - name: default
+          provider: gcp
+          bucket: cluster-dreams-velero-backups
+      volumeSnapshotLocation:
+        - name: default
+          provider: gcp
+          config:
+            region: us-central1
+    credentials:
+      useSecret: false
+    serviceAccount:
+      server:
+        annotations:
+          iam.gke.io/gcp-service-account: velero-controller@cluster-dreams.iam.gserviceaccount.com
+    schedules:
+      nightly-backup:
+        schedule: "0 2 * * *"
+        template:
+          excludedNamespaces:
+            - kube-system
+          storageLocation: default
+    deployNodeAgent: true
+    resources:
+      requests:
+        cpu: 500m
+        memory: 256Mi

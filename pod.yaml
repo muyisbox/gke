@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: debug2
+    class: k8s
+  name: debug2
+spec:
+  nodeName: gke-gitops-cluster-nap-e2-standard-2--46d5ae7d-79lw
+  containers:
+  - image: nicolaka/netshoot
+    name: debug
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
