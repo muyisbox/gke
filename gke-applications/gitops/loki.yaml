@@ -25,8 +25,29 @@ helm:
             index:
               prefix: loki_index_
               period: 24h
+    # loki-0 is the only memberlist peer, so the headless Service must publish
+    # it before it is Ready. Otherwise DNS returns NXDOMAIN, the ring join hits
+    # abort_if_cluster_join_fails, Loki exits, and it can never become Ready to
+    # publish the address in the first place.
+    memberlist:
+      service:
+        publishNotReadyAddresses: true
     singleBinary:
       replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 1Gi
+    # The rules sidecar was OOMKilled (exit 137) with no limit set.
+    sidecar:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
     # Unused in Monolithic mode, but the chart defaults them to non-zero.
     read:
       replicas: 0

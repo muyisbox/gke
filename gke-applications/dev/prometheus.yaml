@@ -45,8 +45,23 @@ helm:
               resources:
                 requests:
                   storage: 10Gi
+    # Both of these ran as BestEffort (no requests at all), were packed onto the
+    # smallest node in the cluster, and exited 2 in a crash loop.
+    kube-state-metrics:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
     prometheusOperator:
       enabled: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
       admissionWebhooks:
         patch:
           podAnnotations:
