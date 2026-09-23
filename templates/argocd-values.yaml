@@ -3,25 +3,15 @@ configs:
     exec.enabled: true
   repositories:
     gke-gitops-repo:
-      url: https://github.com/muyisbox/gke.git
+      url: ${repo_url}
       name: gke-gitops
       type: git
-    istio-helm-repo:
-      url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
-      name: istio.io
-      type: helm
-    prometheus-helm-repo:
-      url: https://storage.googleapis.com/istio-prerelease/daily-build/master-latest-daily/charts
-      name: prometheus.io
-      type: helm
-    ambassador-helm-repo:
-      url: https://app.getambassador.io
-      name: ambassador.io
-      type: helm
-    bitnami-helm-repo:
-      url: https://charts.bitnami.com/bitnami
-      name: bitnami.io
-      type: helm
+
+global:
+  # Chart 10.x turns this on by default. Kept explicit so the setting is a
+  # decision rather than a default that can flip under us on the next bump.
+  networkPolicy:
+    create: true
 
 server:
   autoscaling:
@@ -32,16 +22,13 @@ server:
     targetMemoryUtilizationPercentage: 50
   serviceAccount:
     annotations:
-      iam.gke.io/gcp-service-account: argocd-controller@cluster-dreams.iam.gserviceaccount.com
-
-redis-ha:
-  enabled: true
+      iam.gke.io/gcp-service-account: ${gcp_service_account}
 
 controller:
   replicas: 2
   serviceAccount:
     annotations:
-      iam.gke.io/gcp-service-account: argocd-controller@cluster-dreams.iam.gserviceaccount.com
+      iam.gke.io/gcp-service-account: ${gcp_service_account}
 
 repoServer:
   autoscaling:
@@ -50,3 +37,6 @@ repoServer:
 
 applicationSet:
   replicaCount: 2
+
+redis-ha:
+  enabled: true

@@ -1,11 +1,18 @@
 name: prometheus-monitoring
 chart: kube-prometheus-stack
 repoURL: https://prometheus-community.github.io/helm-charts
-targetRevision: "82.10.3"
+targetRevision: "91.5.0"
 namespace: monitoring
 cluster_env: dev
 helm:
   values:
+    # Helm never upgrades CRDs on `helm upgrade`. Every chart major from
+    # 83 to 91 ships a newer prometheus-operator CRD set, so let the chart
+    # run its own CRD upgrade job instead of applying them by hand.
+    crds:
+      upgradeJob:
+        enabled: true
+        forceConflicts: true
     externalLabels:
       cluster: dev_cluster
     alertmanager:

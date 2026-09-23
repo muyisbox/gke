@@ -1,32 +1,49 @@
 # ============================================================
-# External Secrets Operator - GCP Infrastructure
+# External Secrets Operator — GCP side
+#
+# ESO runs on the gitops cluster and turns Secret Manager entries into ArgoCD
+# cluster Secrets. This keeps spoke CA certificates out of Terraform state and
+# lets spokes re-register themselves after the nightly destroy/recreate cycle
+# without a Terraform run.
 # ============================================================
 
-# GCP Service Account for ESO Workload Identity
+locals {
+  eso_namespace       = "external-secrets"
+  eso_service_account = "external-secrets"
+
+  # Pinned to var.eso_version so the CRDs Terraform applies stay in lockstep
+  # with the chart ArgoCD deploys.
+  eso_crds = {
+    clustersecretstores = "external-secrets.io_clustersecretstores"
+    externalsecrets     = "external-secrets.io_externalsecrets"
+  }
+}
+
 resource "google_service_account" "eso" {
-  count        = terraform.workspace == "gitops" ? 1 : 0
+  count        = local.is_gitops ? 1 : 0
   account_id   = "eso-controller"
   display_name = "ESO Controller - Workload Identity"
   project      = var.project_id
 }
 
-# Grant ESO SA access to read secrets from Secret Manager
 resource "google_project_iam_member" "eso_secret_accessor" {
-  count   = terraform.workspace == "gitops" ? 1 : 0
+  count   = local.is_gitops ? 1 : 0
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.eso[0].email}"
 }
 
-# Workload Identity binding: external-secrets K8s SA -> GCP SA
-resource "google_service_account_iam_member" "eso_wi" {
-  count              = terraform.workspace == "gitops" ? 1 : 0
+resource "google_service_account_iam_member" "eso_workload_identity" {
+  count              = local.is_gitops ? 1 : 0
   service_account_id = google_service_account.eso[0].name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[external-secrets/external-secrets]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${local.eso_namespace}/${local.eso_service_account}]"
 }
 
-# Secret Manager: one secret per remote cluster (dev, staging)
+# ------------------------------------------------------------
+# Secret Manager: one entry per spoke cluster
+# ------------------------------------------------------------
+
 resource "google_secret_manager_secret" "argocd_cluster" {
   for_each  = local.eso_managed_clusters
   secret_id = "argocd-cluster-${each.key}"
@@ -45,50 +62,42 @@ resource "google_secret_manager_secret" "argocd_cluster" {
 resource "google_secret_manager_secret_version" "argocd_cluster" {
   for_each = local.eso_managed_clusters
   secret   = google_secret_manager_secret.argocd_cluster[each.key].id
+
   secret_data = jsonencode({
-    name     = "${each.key}-cluster"
+    name     = each.value.name
     endpoint = each.value.endpoint
     ca_cert  = each.value.ca_cert
   })
 }
 
-# ESO CRDs - only the ones we need (ClusterSecretStore + ExternalSecret)
-# Version is driven by var.eso_version (must match the chart in gke-applications/gitops/external-secrets.yaml)
-data "http" "eso_crd_clustersecretstores" {
-  count = terraform.workspace == "gitops" ? 1 : 0
-  url   = "https://raw.githubusercontent.com/external-secrets/external-secrets/v${var.eso_version}/config/crds/bases/external-secrets.io_clustersecretstores.yaml"
+# ------------------------------------------------------------
+# In-cluster ESO objects
+# ------------------------------------------------------------
+
+# Only the two CRDs we actually use. The chart can install the full set, but
+# Terraform needs these to exist before it can create the CRs below.
+data "http" "eso_crd" {
+  for_each = local.is_gitops ? local.eso_crds : {}
+  url      = "https://raw.githubusercontent.com/external-secrets/external-secrets/v${var.eso_version}/config/crds/bases/${each.value}.yaml"
 }
 
-data "http" "eso_crd_externalsecrets" {
-  count = terraform.workspace == "gitops" ? 1 : 0
-  url   = "https://raw.githubusercontent.com/external-secrets/external-secrets/v${var.eso_version}/config/crds/bases/external-secrets.io_externalsecrets.yaml"
-}
+resource "kubectl_manifest" "eso_crd" {
+  for_each = local.is_gitops ? local.eso_crds : {}
 
-resource "kubectl_manifest" "eso_crd_clustersecretstores" {
-  count             = terraform.workspace == "gitops" ? 1 : 0
-  yaml_body         = data.http.eso_crd_clustersecretstores[0].response_body
+  yaml_body         = data.http.eso_crd[each.key].response_body
   server_side_apply = true
-  depends_on        = [module.gke]
+
+  depends_on = [module.gke]
 }
 
-resource "kubectl_manifest" "eso_crd_externalsecrets" {
-  count             = terraform.workspace == "gitops" ? 1 : 0
-  yaml_body         = data.http.eso_crd_externalsecrets[0].response_body
-  server_side_apply = true
-  depends_on        = [module.gke]
-}
-
-# ClusterSecretStore: ESO backend pointing to GCP Secret Manager via WI
 resource "kubectl_manifest" "eso_cluster_secret_store" {
-  count             = terraform.workspace == "gitops" ? 1 : 0
+  count             = local.is_gitops ? 1 : 0
   server_side_apply = true
 
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1"
     kind       = "ClusterSecretStore"
-    metadata = {
-      name = "gcp-secret-manager"
-    }
+    metadata   = { name = "gcp-secret-manager" }
     spec = {
       provider = {
         gcpsm = {
@@ -96,11 +105,11 @@ resource "kubectl_manifest" "eso_cluster_secret_store" {
           auth = {
             workloadIdentity = {
               clusterLocation  = var.region
-              clusterName      = "gitops-cluster"
+              clusterName      = local.gitops_cluster_name
               clusterProjectID = var.project_id
               serviceAccountRef = {
-                name      = "external-secrets"
-                namespace = "external-secrets"
+                name      = local.eso_service_account
+                namespace = local.eso_namespace
               }
             }
           }
@@ -110,12 +119,12 @@ resource "kubectl_manifest" "eso_cluster_secret_store" {
   })
 
   depends_on = [
-    kubectl_manifest.eso_crd_clustersecretstores,
-    module.argocd
+    kubectl_manifest.eso_crd,
+    module.argocd,
   ]
 }
 
-# ExternalSecrets: one per remote cluster, creates ArgoCD cluster secrets
+# One ExternalSecret per spoke; ESO materialises it as an ArgoCD cluster Secret.
 resource "kubectl_manifest" "argocd_external_secret" {
   for_each          = local.eso_managed_clusters
   server_side_apply = true
@@ -125,7 +134,7 @@ resource "kubectl_manifest" "argocd_external_secret" {
     kind       = "ExternalSecret"
     metadata = {
       name      = "${each.key}-cluster-secret"
-      namespace = "argocd"
+      namespace = var.argocd.namespace
     }
     spec = {
       refreshInterval = "1h"
@@ -160,9 +169,7 @@ resource "kubectl_manifest" "argocd_external_secret" {
         }
       }
       dataFrom = [{
-        extract = {
-          key = "argocd-cluster-${each.key}"
-        }
+        extract = { key = "argocd-cluster-${each.key}" }
       }]
     }
   })

@@ -1,113 +1,84 @@
+# ============================================================
+# ArgoCD — installed on the gitops cluster only
+# ============================================================
 
-## This installs argo into the gitops cluster only
+locals {
+  gitops_only = local.is_gitops ? toset([var.gitops_workspace]) : toset([])
+}
+
 module "argocd" {
   source   = "./modules/helm"
-  for_each = terraform.workspace == "gitops" ? toset(["gitops"]) : toset([])
+  for_each = local.gitops_only
 
-  namespace  = lookup(local.charts.argocd, "namespace", "default")
+  namespace  = local.charts.argocd.namespace
   repository = "https://argoproj.github.io/argo-helm"
-  app        = lookup(local.charts.argocd, "app", null)
-  values     = lookup(local.charts.argocd, "values", [])
+  app        = local.charts.argocd.app
+  values     = local.charts.argocd.values
 
-  depends_on = [
-    module.gke
-  ]
-
+  depends_on = [module.gke]
 }
 
-# ArgoCD apps - deployed only on gitops cluster
+# Renders the per-cluster AppProjects and ApplicationSets that pull
+# gke-applications/<env>/*.yaml out of the config repo.
 module "argocd-apps" {
-  source     = "./modules/helm"
-  for_each   = terraform.workspace == "gitops" ? toset(["gitops"]) : toset([])
-  namespace  = lookup(local.charts.argocd_apps, "namespace", "default")
+  source   = "./modules/helm"
+  for_each = local.gitops_only
+
+  namespace  = local.charts.argocd_apps.namespace
   repository = "https://argoproj.github.io/argo-helm"
-  app        = lookup(local.charts.argocd_apps, "app")
-  values     = lookup(local.charts.argocd_apps, "values", [])
-  depends_on = [
-    module.argocd, module.gke
-  ]
+  app        = local.charts.argocd_apps.app
+  values     = local.charts.argocd_apps.values
+
+  depends_on = [module.argocd]
 }
 
-# GCP Service Account for ArgoCD Workload Identity
+# ------------------------------------------------------------
+# Workload Identity for the ArgoCD control plane
+# ------------------------------------------------------------
+
 resource "google_service_account" "argocd" {
-  count        = terraform.workspace == "gitops" ? 1 : 0
+  count        = local.is_gitops ? 1 : 0
   account_id   = "argocd-controller"
   display_name = "ArgoCD Controller - Workload Identity"
   project      = var.project_id
 }
 
-# Grant container.admin so ArgoCD can fully manage K8s resources on all clusters
-# (CRDs, namespaces, ClusterRoles, etc. required for hub-spoke pattern)
+# container.admin, not container.developer: the hub-spoke pattern has ArgoCD
+# creating CRDs, namespaces and ClusterRoles on every spoke.
 resource "google_project_iam_member" "argocd_container_admin" {
-  count   = terraform.workspace == "gitops" ? 1 : 0
+  count   = local.is_gitops ? 1 : 0
   project = var.project_id
   role    = "roles/container.admin"
   member  = "serviceAccount:${google_service_account.argocd[0].email}"
 }
 
-# Workload Identity binding: argocd-application-controller K8s SA -> GCP SA
-resource "google_service_account_iam_member" "argocd_controller_wi" {
-  count              = terraform.workspace == "gitops" ? 1 : 0
+resource "google_service_account_iam_member" "argocd_workload_identity" {
+  for_each = local.is_gitops ? toset(["argocd-application-controller", "argocd-server"]) : toset([])
+
   service_account_id = google_service_account.argocd[0].name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[argocd/argocd-application-controller]"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.argocd.namespace}/${each.key}]"
 }
 
-# Workload Identity binding: argocd-server K8s SA -> GCP SA
-resource "google_service_account_iam_member" "argocd_server_wi" {
-  count              = terraform.workspace == "gitops" ? 1 : 0
-  service_account_id = google_service_account.argocd[0].name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[argocd/argocd-server]"
-}
+# ------------------------------------------------------------
+# Cluster registration
+# ------------------------------------------------------------
 
-# Data sources for all cluster endpoints (used to register clusters in ArgoCD)
-data "google_container_cluster" "gitops" {
-  count    = terraform.workspace == "gitops" ? 1 : 0
-  name     = "gitops-cluster"
-  location = var.region
-  project  = var.project_id
-
-  depends_on = [module.gke]
-}
-
-# Discover which remote clusters currently exist (handles destroy/create cycle)
-# During the nightly destroy window, dev/staging won't exist - this prevents plan failures
-data "http" "gke_clusters" {
-  count = terraform.workspace == "gitops" ? 1 : 0
-  url   = "https://container.googleapis.com/v1/projects/${var.project_id}/locations/${var.region}/clusters"
-
-  request_headers = {
-    Authorization = "Bearer ${data.google_client_config.default.access_token}"
-  }
-}
-
-# Remote clusters - only looked up if they actually exist
-data "google_container_cluster" "remote" {
-  for_each = terraform.workspace == "gitops" ? toset([
-    for name in local.remote_workspaces : name
-    if can(regex("\"${name}-cluster\"", try(data.http.gke_clusters[0].response_body, "")))
-  ]) : toset([])
-
-  name     = "${each.key}-cluster"
-  location = var.region
-  project  = var.project_id
-}
-
-# ArgoCD cluster secret - gitops only (dev/staging managed by ESO)
-resource "kubernetes_secret" "argocd_cluster" {
-  for_each = terraform.workspace == "gitops" ? toset(["gitops"]) : toset([])
+# The hub registers itself directly. Spokes are registered by ESO from Secret
+# Manager (see eso.tf) so their CA data never lands in Terraform state.
+resource "kubernetes_secret_v1" "argocd_cluster" {
+  for_each = local.gitops_only
 
   metadata {
     name      = "${each.key}-cluster-secret"
-    namespace = "argocd"
+    namespace = var.argocd.namespace
     labels = {
       "argocd.argoproj.io/secret-type" = "cluster"
     }
   }
 
   data = {
-    name   = "${each.key}-cluster"
+    name   = local.argocd_clusters[each.key].name
     server = "https://${local.argocd_clusters[each.key].endpoint}"
     config = jsonencode({
       execProviderConfig = {

@@ -1,20 +1,18 @@
-# Project Configuration
-project_id                     = "cluster-dreams" # Replace with your actual GCP project ID
-compute_engine_service_account = "create"         # Creates a new service account for the nodes
+# Project
+project_id                = "cluster-dreams"
+terraform_service_account = "terraform@cluster-dreams.iam.gserviceaccount.com"
 
-# Cluster Configuration
-# Defines basic properties of the GKE cluster including names and location.
-cluster_name        = "cluster"                                           # Base name of the cluster
-region              = "us-central1"                                       # The GCP region where the cluster is deployed
-zones               = ["us-central1-c", "us-central1-b", "us-central1-a"] # Zones within the region for cluster deployment
-cluster_name_suffix = "dev"                                               # Suffix to append to the cluster name indicating the environment
-
+# Location
+region = "us-central1"
+zones  = ["us-central1-c", "us-central1-b", "us-central1-a"]
 
 # Environments
-# To add a new environment (e.g. "prod"):
-#   1. Add an entry below with a unique node_cidr, range_base, and master_cidr_offset
-#   2. Create gke-applications/prod/ with app definitions
-#   3. Run: terraform workspace new prod && terraform apply
+# Each key is a Terraform workspace and produces one cluster.
+# To add one (e.g. "prod"):
+#   1. Add an entry below with a free node_cidr, range_base and master_cidr_offset
+#   2. Create gke-applications/prod/ with its app definitions
+#   3. Add the workspace to _WORKSPACES in cicd/cloudbuild.yaml
+#   4. terraform workspace new prod && terraform apply
 environments = {
   dev = {
     node_cidr          = "10.10.0.0/17"
@@ -33,34 +31,42 @@ environments = {
   }
 }
 
-# ArgoCD Configuration
-# Sets up ArgoCD in the cluster to manage deployments and configurations.
+# Cluster shape
+# Capacity comes from node auto-provisioning; there are no static node pools.
+# Every attribute is optional and falls back to the default in variables.tf.
+cluster_autoscaling = {
+  enabled                      = true
+  enable_default_compute_class = true
+  autoscaling_profile          = "OPTIMIZE_UTILIZATION"
+  min_cpu_cores                = 0
+  max_cpu_cores                = 48
+  min_memory_gb                = 0
+  max_memory_gb                = 192
+  disk_size                    = 30
+  disk_type                    = "pd-standard"
+  auto_repair                  = true
+  auto_upgrade                 = true
+  gpu_resources                = []
+}
+
+# ArgoCD control plane (gitops workspace only)
 argocd = {
-  namespace = "argocd" # Kubernetes namespace where ArgoCD is deployed
+  namespace = "argocd"
   app = {
-    name             = "argo-cd" # Name of the ArgoCD application
-    version          = "9.4.10"  # ArgoCD v3.3.3
-    chart            = "argo-cd" # Helm chart name for ArgoCD
-    force_update     = true      # Force update the app if true
-    wait             = false     # If true, the Terraform provider waits for the app to be fully deployed
-    recreate_pods    = false     # Force recreate pods during helm upgrade if true
-    deploy           = true      # Deploy the application if true
-    create_namespace = true      # Create the Kubernetes namespace if it doesn't exist
+    name    = "argo-cd"
+    chart   = "argo-cd"
+    version = "10.9.2" # Argo CD v3.5.3
+    wait    = false
   }
 }
 
-# ArgoCD Applications Configuration#
-# Defines the setup for applications managed by ArgoCD.
+# Renders the per-cluster AppProjects and ApplicationSets
 argocd_apps = {
-  namespace = "argocd" # Kubernetes namespace for ArgoCD applications
+  namespace = "argocd"
   app = {
-    name             = "argocd-apps" # Name of the app deployment managed by ArgoCD
-    version          = "2.0.4"       # Version of the app to deploy
-    chart            = "argocd-apps" # Helm chart for the app
-    force_update     = true          # Force update the app if set to true
-    wait             = false         # Wait for full deployment if true
-    recreate_pods    = false         # Recreate pods on update if true
-    deploy           = true          # Deploy the application if true
-    create_namespace = true          # Create the namespace if it doesn't exist
+    name    = "argocd-apps"
+    chart   = "argocd-apps"
+    version = "2.0.5"
+    wait    = false
   }
 }

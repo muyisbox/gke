@@ -1,54 +1,45 @@
 terraform {
-  # backend "gcs" {
-  #   bucket = "terraform-310821"
-  #   prefix = "terraform/state"
-  # } # Trigger
+  required_version = ">= 1.9"
+
   backend "gcs" {
     bucket = "cluster-dreams-terraform"
     prefix = "terraform/state"
   }
+
   required_providers {
+    # Upper bound is not cosmetic: terraform-google-modules/kubernetes-engine
+    # v45 declares ">= 7.39.0, < 8". Raising this to 8.x will fail `init` until
+    # the GKE module publishes a release that supports it.
     google = {
       source  = "hashicorp/google"
-      version = "~> 7.0"
+      version = ">= 7.39.0, < 8.0"
     }
+    # Not used directly, but the shared-network module is. Without this pin it
+    # floats to 8.x while google stays on 7.x, which puts two different schema
+    # generations behind the same resources.
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = "~> 7.0"
+      version = ">= 7.39.0, < 8.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.25"
+      version = "~> 3.2"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 3.0"
+      version = "~> 3.3"
     }
+    # Applies raw YAML (ESO CRDs + CRs) that has no first-class resource in the
+    # kubernetes provider. kubernetes_manifest is not a substitute here: it
+    # requires a reachable API server at plan time, which breaks the nightly
+    # destroy/recreate cycle.
     kubectl = {
       source  = "gavinbunney/kubectl"
       version = "~> 1.19"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.5"
+    }
   }
-  required_version = ">= 1.5"
-}
-
-provider "helm" {
-  kubernetes = {
-    host                   = "https://${module.gke.endpoint}"
-    token                  = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(module.gke.ca_certificate)
-  }
-}
-
-provider "kubernetes" {
-  host                   = "https://${module.gke.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(module.gke.ca_certificate)
-}
-
-provider "kubectl" {
-  host                   = "https://${module.gke.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(module.gke.ca_certificate)
-  load_config_file       = false
 }

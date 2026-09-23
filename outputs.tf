@@ -1,65 +1,46 @@
-/**
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+output "cluster_name" {
+  description = "Name of the GKE cluster this workspace owns."
+  value       = module.gke.name
+}
 
 output "kubernetes_endpoint" {
-  description = "The cluster endpoint"
+  description = "Control-plane endpoint of this workspace's cluster."
   sensitive   = true
   value       = module.gke.endpoint
 }
 
-output "client_token" {
-  description = "The bearer token for auth"
-  sensitive   = true
-  value       = base64encode(data.google_client_config.default.access_token)
-}
-
 output "ca_certificate" {
-  description = "The cluster ca certificate (base64 encoded)"
+  description = "Base64-encoded cluster CA certificate."
   sensitive   = true
   value       = module.gke.ca_certificate
 }
 
 output "service_account" {
-  description = "The default service account used for running nodes."
+  description = "Default service account the cluster's nodes run as."
   value       = module.gke.service_account
 }
 
-output "cluster_name" {
-  description = "Cluster name"
-  value       = module.gke.name
-}
-
 output "network_name" {
-  description = "The name of the VPC being used"
+  description = "Shared VPC backing every cluster."
   value       = local.shared_network_name
 }
 
 output "subnet_name" {
-  description = "The name of the subnet being used"
-  value       = terraform.workspace == "gitops" ? module.shared-network[0].subnets_names : ["gke-subnet-${terraform.workspace}"]
+  description = "Subnet this workspace's nodes live in."
+  value       = local.subnet_name
 }
 
 output "subnet_secondary_ranges" {
-  description = "The secondary ranges associated with the subnet"
-  value       = terraform.workspace == "gitops" ? module.shared-network[0].subnets_secondary_ranges : []
+  description = "Secondary pod/service ranges on the shared subnets. Only populated in the gitops workspace, which owns them."
+  value       = local.is_gitops ? module.shared-network[0].subnets_secondary_ranges : []
 }
 
+output "registered_argocd_clusters" {
+  description = "Clusters ArgoCD is currently registered against. Empty outside the gitops workspace."
+  value       = keys(local.argocd_clusters)
+}
 
 output "cluster_connect" {
-  description = "The message enables generate a kube-config file for the ckuster"
-  value       = format("gcloud container clusters get-credentials %s --region %s --project %s", module.gke.name, var.region, var.project_id)
+  description = "Command to write a kubeconfig entry for this cluster."
+  value       = "gcloud container clusters get-credentials ${module.gke.name} --region ${var.region} --project ${var.project_id}"
 }
-

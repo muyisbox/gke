@@ -1,7 +1,7 @@
 name: vpa
 chart: vpa
 repoURL: https://charts.fairwinds.com/stable
-targetRevision: "4.10.1"
+targetRevision: "5.1.0"
 namespace: vpa
 cluster_env: staging
 helm:
