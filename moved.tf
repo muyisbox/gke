@@ -64,3 +64,25 @@ moved {
   from = google_service_account_iam_member.eso_wi
   to   = google_service_account_iam_member.eso_workload_identity
 }
+
+# 2026-09 — ESO CRD and ClusterSecretStore ownership moved to ArgoCD.
+#
+# destroy = false is not optional here. Deleting a CRD cascades to every custom
+# resource of that kind, so a plain removal would take the ExternalSecrets and
+# ClusterSecretStores with it. These blocks drop the state entries and leave the
+# live objects for ArgoCD to keep managing.
+removed {
+  from = kubectl_manifest.eso_crd
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubectl_manifest.eso_cluster_secret_store
+
+  lifecycle {
+    destroy = false
+  }
+}

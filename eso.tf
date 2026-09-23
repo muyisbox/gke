@@ -5,18 +5,20 @@
 # cluster Secrets. This keeps spoke CA certificates out of Terraform state and
 # lets spokes re-register themselves after the nightly destroy/recreate cycle
 # without a Terraform run.
+#
+# Ownership split: ArgoCD owns the ESO chart, its CRDs, and the
+# ClusterSecretStore (declared as extraObjects in the app definition).
+# Terraform owns only the GCP side plus the per-spoke ExternalSecrets, which
+# are derived from the live cluster list and so cannot live in a static file.
+#
+# Terraform must not apply the CRDs. The chart always creates the core ones, so
+# both would be server-side-apply managers of .spec.versions and would conflict
+# the moment the two sides disagreed on a version.
 # ============================================================
 
 locals {
   eso_namespace       = "external-secrets"
   eso_service_account = "external-secrets"
-
-  # Pinned to var.eso_version so the CRDs Terraform applies stay in lockstep
-  # with the chart ArgoCD deploys.
-  eso_crds = {
-    clustersecretstores = "external-secrets.io_clustersecretstores"
-    externalsecrets     = "external-secrets.io_externalsecrets"
-  }
 }
 
 resource "google_service_account" "eso" {
@@ -74,56 +76,6 @@ resource "google_secret_manager_secret_version" "argocd_cluster" {
 # In-cluster ESO objects
 # ------------------------------------------------------------
 
-# Only the two CRDs we actually use. The chart can install the full set, but
-# Terraform needs these to exist before it can create the CRs below.
-data "http" "eso_crd" {
-  for_each = local.is_gitops ? local.eso_crds : {}
-  url      = "https://raw.githubusercontent.com/external-secrets/external-secrets/v${var.eso_version}/config/crds/bases/${each.value}.yaml"
-}
-
-resource "kubectl_manifest" "eso_crd" {
-  for_each = local.is_gitops ? local.eso_crds : {}
-
-  yaml_body         = data.http.eso_crd[each.key].response_body
-  server_side_apply = true
-
-  depends_on = [module.gke]
-}
-
-resource "kubectl_manifest" "eso_cluster_secret_store" {
-  count             = local.is_gitops ? 1 : 0
-  server_side_apply = true
-
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1"
-    kind       = "ClusterSecretStore"
-    metadata   = { name = "gcp-secret-manager" }
-    spec = {
-      provider = {
-        gcpsm = {
-          projectID = var.project_id
-          auth = {
-            workloadIdentity = {
-              clusterLocation  = var.region
-              clusterName      = local.gitops_cluster_name
-              clusterProjectID = var.project_id
-              serviceAccountRef = {
-                name      = local.eso_service_account
-                namespace = local.eso_namespace
-              }
-            }
-          }
-        }
-      }
-    }
-  })
-
-  depends_on = [
-    kubectl_manifest.eso_crd,
-    module.argocd,
-  ]
-}
-
 # One ExternalSecret per spoke; ESO materialises it as an ArgoCD cluster Secret.
 resource "kubectl_manifest" "argocd_external_secret" {
   for_each          = local.eso_managed_clusters
@@ -174,5 +126,5 @@ resource "kubectl_manifest" "argocd_external_secret" {
     }
   })
 
-  depends_on = [kubectl_manifest.eso_cluster_secret_store]
+  depends_on = [module.argocd]
 }
