@@ -1,7 +1,7 @@
 name: kiali-server
 chart: kiali-server
 repoURL: https://kiali.org/helm-charts
-targetRevision: "2.23.0"
+targetRevision: "2.32.0"
 namespace: istio-system
 cluster_env: dev
 helm:

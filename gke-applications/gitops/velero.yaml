@@ -1,25 +1,41 @@
 name: velero
 chart: velero
 repoURL: https://vmware-tanzu.github.io/helm-charts
-targetRevision: "8.1.0"
+targetRevision: "12.2.0"
 namespace: velero
 cluster_env: gitops
 helm:
   values:
+    # The GCP object-store and volume-snapshot plugins ship as an init
+    # container. Without it the server exits with "unable to find plugin for
+    # provider gcp" and no backup ever runs.
+    initContainers:
+      - name: velero-plugin-for-gcp
+        image: velero/velero-plugin-for-gcp:v1.14.3
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+          - mountPath: /target
+            name: plugins
     configuration:
       backupStorageLocation:
         - name: default
           provider: gcp
           bucket: cluster-dreams-velero-backups
+          # Every cluster shares one bucket; without a per-cluster prefix they
+          # write into the same backup namespace and overwrite each other.
+          prefix: gitops
       volumeSnapshotLocation:
         - name: default
           provider: gcp
           config:
             region: us-central1
+    # Auth comes from Workload Identity (see velero.tf), not a key file.
     credentials:
       useSecret: false
     serviceAccount:
       server:
+        create: true
+        name: velero
         annotations:
           iam.gke.io/gcp-service-account: velero-controller@cluster-dreams.iam.gserviceaccount.com
     schedules:
@@ -29,6 +45,7 @@ helm:
           excludedNamespaces:
             - kube-system
           storageLocation: default
+          ttl: 720h
     deployNodeAgent: true
     resources:
       requests:
