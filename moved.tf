@@ -1,35 +1,66 @@
-# State migration for shared network resources
-# When we added count to the shared-network module, resource addresses changed
-# These moved blocks tell Terraform to rename resources in state instead of destroying them
+# State moves. Keep these until every workspace has run an apply past the
+# change that introduced them; removing one early makes Terraform destroy and
+# recreate the resource instead of renaming it in state.
 
-# Only apply these moves in gitops workspace where the module exists
-
-# VPC Network
+# 2026-03 — the shared network module gained `count` when the per-workspace
+# VPCs were collapsed into one, which shifted every address under it.
 moved {
   from = module.shared-network.module.vpc.google_compute_network.network
   to   = module.shared-network[0].module.vpc.google_compute_network.network
 }
 
-# Subnets
 moved {
   from = module.shared-network.module.subnets.google_compute_subnetwork.subnetwork
   to   = module.shared-network[0].module.subnets.google_compute_subnetwork.subnetwork
 }
 
-# Routes (if any)
 moved {
   from = module.shared-network.module.routes
   to   = module.shared-network[0].module.routes
 }
 
-# Cloud Router
 moved {
   from = google_compute_router.shared_router
   to   = google_compute_router.shared_router[0]
 }
 
-# Cloud NAT
 moved {
   from = google_compute_router_nat.shared_nat
   to   = google_compute_router_nat.shared_nat[0]
+}
+
+# 2026-09 — kubernetes provider v3 deprecates the unsuffixed resource names in
+# favour of their _v1 equivalents.
+moved {
+  from = kubernetes_secret.argocd_cluster
+  to   = kubernetes_secret_v1.argocd_cluster
+}
+
+# 2026-09 — the two ArgoCD Workload Identity bindings collapsed into one
+# for_each keyed by Kubernetes service account name.
+moved {
+  from = google_service_account_iam_member.argocd_controller_wi[0]
+  to   = google_service_account_iam_member.argocd_workload_identity["argocd-application-controller"]
+}
+
+moved {
+  from = google_service_account_iam_member.argocd_server_wi[0]
+  to   = google_service_account_iam_member.argocd_workload_identity["argocd-server"]
+}
+
+# 2026-09 — the ESO CRD data sources and manifests became a single for_each.
+moved {
+  from = kubectl_manifest.eso_crd_clustersecretstores[0]
+  to   = kubectl_manifest.eso_crd["clustersecretstores"]
+}
+
+moved {
+  from = kubectl_manifest.eso_crd_externalsecrets[0]
+  to   = kubectl_manifest.eso_crd["externalsecrets"]
+}
+
+# 2026-09 — eso_wi renamed for consistency with the other identity bindings.
+moved {
+  from = google_service_account_iam_member.eso_wi
+  to   = google_service_account_iam_member.eso_workload_identity
 }

@@ -4,8 +4,8 @@ applicationsets:
     namespace: argocd
     generators:
     - git:
-        repoURL: https://github.com/muyisbox/gke.git
-        revision: master
+        repoURL: ${repo_url}
+        revision: ${repo_revision}
         files:
         - path: gke-applications/${cluster_name}/*.yaml
     template:
