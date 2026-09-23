@@ -294,12 +294,6 @@ variable "compute_classes" {
 # Platform add-ons managed by Terraform
 # ---------------------------------------------------------------------------
 
-variable "eso_version" {
-  description = "External Secrets Operator version. Drives the CRDs Terraform applies; must match the chart pinned in gke-applications/*/external-secrets.yaml."
-  type        = string
-  default     = "2.11.0"
-}
-
 variable "velero" {
   description = "Backing GCP resources for the Velero chart deployed by ArgoCD. bucket_name defaults to <project_id>-velero-backups."
   type = object({
