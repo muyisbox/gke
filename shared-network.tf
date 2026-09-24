@@ -64,3 +64,25 @@ resource "google_compute_router_nat" "shared_nat" {
     filter = "ERRORS_ONLY"
   }
 }
+
+# Destroy-ordering barrier between the cluster and the subnets it sits in.
+#
+# module.gke already depends on this module through `network`, so Terraform
+# destroys the cluster first. The problem is that the GKE DELETE operation
+# reports DONE before Compute Engine has finished reclaiming the node
+# instances, and the subnet delete then fails:
+#
+#   Error 400: The subnetwork resource '...gke-subnet-gitops' is already being
+#   used by '...instances/gke-gitops-cluster-nap-...', resourceInUseByAnotherResource
+#
+# Dependencies are: shared-network <- this <- module.gke. Destroy runs in
+# reverse, so the cluster goes first, this sleeps, then the subnets are
+# removed. Create is not delayed.
+resource "time_sleep" "node_drain" {
+  count = local.is_gitops ? 1 : 0
+
+  depends_on = [module.shared-network]
+
+  create_duration  = "0s"
+  destroy_duration = var.node_drain_wait
+}

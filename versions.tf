@@ -41,5 +41,10 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.5"
     }
+    # Used only for the destroy-ordering barrier in shared-network.tf.
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
   }
 }

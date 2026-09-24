@@ -32,6 +32,10 @@ module "gke" {
   node_pools_metadata     = { all = {} }
   node_pools_taints       = { all = [] }
   node_pools_tags         = { all = [] }
+
+  # Not for ordering on the way up (`network` already covers that), but so the
+  # cluster is torn down and given time to settle before the subnets go.
+  depends_on = [time_sleep.node_drain]
 }
 
 # Cloud Build's Terraform identity needs container.admin to manage in-cluster
