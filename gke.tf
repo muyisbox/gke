@@ -33,9 +33,17 @@ module "gke" {
   node_pools_taints       = { all = [] }
   node_pools_tags         = { all = [] }
 
-  # Not for ordering on the way up (`network` already covers that), but so the
-  # cluster is torn down and given time to settle before the subnets go.
-  depends_on = [time_sleep.node_drain]
+  # `network` is the only wiring that references the network module; subnetwork,
+  # ip_range_pods and ip_range_services are plain strings built from the
+  # workspace name. That makes the cluster depend on the VPC but not on the
+  # subnet or its secondary ranges, so on a cold create Terraform is free to
+  # call clusters.create before they exist. Stated explicitly rather than
+  # relying on time_sleep to imply it, so tuning or removing the sleep cannot
+  # silently reintroduce the race.
+  depends_on = [
+    module.shared-network,
+    time_sleep.node_drain,
+  ]
 }
 
 # Cloud Build's Terraform identity needs container.admin to manage in-cluster
