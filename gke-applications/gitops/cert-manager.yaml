@@ -57,6 +57,70 @@ helm:
         spec:
           ca:
             secretName: selfsigned-ca-tls
+      - |
+        # Sample 1: a regular leaf certificate. Not a CA -- isCA defaults to
+        # false and is stated here only to make that explicit. This is the
+        # shape an actual workload uses: cert-manager writes tls.crt, tls.key
+        # and ca.crt into the named Secret for a Deployment to mount.
+        apiVersion: cert-manager.io/v1
+        kind: Certificate
+        metadata:
+          name: sample-app-tls
+          namespace: default
+          labels:
+            app.kubernetes.io/component: sample
+        spec:
+          isCA: false
+          secretName: sample-app-tls
+          commonName: sample-app.default.svc.cluster.local
+          dnsNames:
+            - sample-app.default.svc.cluster.local
+            - sample-app.default.svc
+            - sample-app
+          duration: 2160h # 90d
+          renewBefore: 360h # 15d, so renewal is well clear of expiry
+          privateKey:
+            algorithm: ECDSA
+            size: 256
+            rotationPolicy: Always
+          usages:
+            - server auth
+            - key encipherment
+            - digital signature
+          # Chains to the cluster CA, so one trusted root covers every leaf.
+          issuerRef:
+            name: selfsigned-ca
+            kind: ClusterIssuer
+            group: cert-manager.io
+      - |
+        # Sample 2: the same leaf issued straight from the SelfSigned issuer.
+        # Included for contrast -- it is its own root, so a client has to trust
+        # this certificate specifically. Fine for a throwaway, which is why the
+        # CA above exists for anything real.
+        apiVersion: cert-manager.io/v1
+        kind: Certificate
+        metadata:
+          name: sample-standalone-tls
+          namespace: default
+          labels:
+            app.kubernetes.io/component: sample
+        spec:
+          isCA: false
+          secretName: sample-standalone-tls
+          commonName: sample-standalone.default.svc.cluster.local
+          dnsNames:
+            - sample-standalone.default.svc.cluster.local
+          duration: 2160h # 90d
+          renewBefore: 360h # 15d
+          privateKey:
+            algorithm: ECDSA
+            size: 256
+          usages:
+            - server auth
+          issuerRef:
+            name: selfsigned
+            kind: ClusterIssuer
+            group: cert-manager.io
     prometheus:
       enabled: true
       servicemonitor:
