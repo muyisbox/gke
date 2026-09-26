@@ -34,6 +34,25 @@ repoServer:
   autoscaling:
     enabled: true
     minReplicas: 2
+  # The repo-server ran as BestEffort. Rendering kube-prometheus-stack and Loki
+  # starved it enough that /healthz stopped answering within the probe timeout,
+  # so the kubelet killed it mid-render. Every Application then failed to sync
+  # with "connection refused" or "produced zero addresses" against the
+  # repo-server Service.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+  # Chart defaults are timeoutSeconds 1. A large chart render can block the
+  # health handler for longer than that without the process being unhealthy.
+  livenessProbe:
+    timeoutSeconds: 10
+    failureThreshold: 5
+  readinessProbe:
+    timeoutSeconds: 10
+    failureThreshold: 5
 
 applicationSet:
   replicaCount: 2

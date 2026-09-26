@@ -209,10 +209,15 @@ variable "compute_classes" {
     # Cluster-wide default. On-demand only: everything unlabelled lands here,
     # including ArgoCD and the monitoring stack.
     default = {
+      # min_memory_gb matters more than cores here. Without it, e2-medium
+      # satisfies min_cores = 2 with only ~2.8Gi allocatable, and the
+      # autoscaler packed the monitoring stack and Loki onto one, where they
+      # crash looped. 8Gi lands on e2-standard-2, matching the nodes that
+      # stayed healthy.
       priorities = [
-        { machine_family = "e2", min_cores = 2 },
-        { machine_family = "n2", min_cores = 2 },
-        { machine_family = "n2d", min_cores = 2 },
+        { machine_family = "e2", min_cores = 2, min_memory_gb = 8 },
+        { machine_family = "n2", min_cores = 2, min_memory_gb = 8 },
+        { machine_family = "n2d", min_cores = 2, min_memory_gb = 8 },
       ]
       autoscaling_policy = {
         consolidation_delay_minutes = 10
