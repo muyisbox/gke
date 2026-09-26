@@ -12,6 +12,11 @@ helm:
   values:
     controller:
       type: daemonset
+      # A log collector that cannot schedule is a blind spot, and these nodes
+      # sit at 92-99% requested CPU. node-critical lets the DaemonSet preempt
+      # lower-priority work rather than sit Pending, which is the same reason
+      # kube-proxy and the CNI use it.
+      priorityClassName: system-node-critical
       # A log collector is only useful if it runs everywhere, including nodes
       # tainted for spot or dedicated workloads.
       tolerations:
@@ -111,6 +116,26 @@ helm:
               url = "http://loki-gateway.logging.svc.cluster.local/loki/api/v1/push"
             }
           }
+    # GKE ships a gcp-critical-pods quota only in kube-system and its own
+    # managed namespaces. Kubernetes rejects system-node-critical in any
+    # namespace without a quota whose scopeSelector matches it, with
+    # "insufficient quota to match these scopes", so the namespace needs its
+    # own. pods: 1G mirrors what GKE sets in kube-system: present, not limiting.
+    extraObjects:
+      - apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: critical-pods
+        spec:
+          hard:
+            pods: 1G
+          scopeSelector:
+            matchExpressions:
+              - operator: In
+                scopeName: PriorityClass
+                values:
+                  - system-node-critical
+                  - system-cluster-critical
     serviceMonitor:
       enabled: true
       additionalLabels:
