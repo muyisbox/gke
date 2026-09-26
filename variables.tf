@@ -116,6 +116,12 @@ variable "cluster_autoscaling" {
   default = {}
 }
 
+variable "node_drain_wait" {
+  description = "How long to wait after the cluster is deleted before removing its subnets. Covers the window where GKE has reported the cluster gone but Compute Engine is still reclaiming node instances, which fails the subnet delete with resourceInUseByAnotherResource. Only applies on destroy."
+  type        = string
+  default     = "180s"
+}
+
 variable "release_channel" {
   description = "GKE release channel for control plane and node upgrades."
   type        = string
