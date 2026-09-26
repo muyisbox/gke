@@ -9,6 +9,54 @@ helm:
     crds:
       enabled: true
     replicaCount: 2
+    # Self-signed bootstrap chain.
+    #
+    # ClusterIssuer/selfsigned exists only to sign the root below it. Issuing
+    # leaf certificates straight from a SelfSigned issuer gives every workload
+    # its own unrelated root, so nothing can be trusted in bulk. Signing one CA
+    # and issuing from that means clients trust a single certificate.
+    #
+    # This chart renders extraObjects through tpl, so each entry is a string
+    # rather than a map.
+    extraObjects:
+      - |
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        metadata:
+          name: selfsigned
+        spec:
+          selfSigned: {}
+      - |
+        # The root. Lives in the cert-manager namespace because a ClusterIssuer
+        # resolves ca.secretName against the controller's cluster resource
+        # namespace, which is the release namespace.
+        apiVersion: cert-manager.io/v1
+        kind: Certificate
+        metadata:
+          name: selfsigned-ca
+          namespace: cert-manager
+        spec:
+          isCA: true
+          commonName: cluster-dreams-internal-ca
+          secretName: selfsigned-ca-tls
+          duration: 87600h # 10y
+          renewBefore: 720h # 30d
+          privateKey:
+            algorithm: ECDSA
+            size: 256
+          issuerRef:
+            name: selfsigned
+            kind: ClusterIssuer
+            group: cert-manager.io
+      - |
+        # What workloads should actually issue from.
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        metadata:
+          name: selfsigned-ca
+        spec:
+          ca:
+            secretName: selfsigned-ca-tls
     prometheus:
       enabled: true
       servicemonitor:
