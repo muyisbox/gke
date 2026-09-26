@@ -1,0 +1,117 @@
+name: alloy
+# Ships container logs into Loki. Without a collector Loki only ever contains
+# its own canary stream, which is what "unknown_service" in Grafana was.
+# Promtail is the obvious alternative but its chart is marked deprecated
+# upstream; Alloy is the maintained successor.
+chart: alloy
+repoURL: https://grafana.github.io/helm-charts
+targetRevision: "1.13.0"
+namespace: logging
+cluster_env: staging
+helm:
+  values:
+    controller:
+      type: daemonset
+      # A log collector is only useful if it runs everywhere, including nodes
+      # tainted for spot or dedicated workloads.
+      tolerations:
+        - operator: Exists
+      podLabels:
+        sidecar.istio.io/inject: "false"
+    alloy:
+      # /var/log/pods, where the kubelet writes container logs.
+      mounts:
+        varlog: true
+      # Those files are root-owned.
+      securityContext:
+        runAsUser: 0
+      # Scoping discovery to this node needs the node name at runtime.
+      extraEnv:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+      configMap:
+        content: |
+          // Only this node's pods. Without the field selector every DaemonSet pod would
+          // tail every pod in the cluster and each line would land in Loki N times.
+          discovery.kubernetes "pods" {
+            role = "pod"
+
+            selectors {
+              role  = "pod"
+              field = "spec.nodeName=" + sys.env("NODE_NAME")
+            }
+          }
+
+          discovery.relabel "pod_logs" {
+            targets = discovery.kubernetes.pods.targets
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              target_label  = "namespace"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              target_label  = "pod"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              target_label  = "container"
+            }
+
+            // Loki derives service_name from app_kubernetes_io_name, app, or job. With
+            // none of them present every stream collapses to "unknown_service".
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+              target_label  = "app"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+              separator     = "/"
+              target_label  = "job"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+              separator     = "/"
+              action        = "replace"
+              replacement   = "/var/log/pods/*$1/*.log"
+              target_label  = "__path__"
+            }
+          }
+
+          local.file_match "pod_logs" {
+            path_targets = discovery.relabel.pod_logs.output
+          }
+
+          loki.source.file "pod_logs" {
+            targets    = local.file_match.pod_logs.targets
+            forward_to = [loki.process.pod_logs.receiver]
+          }
+
+          // Container runtime wraps each line; strip it back to the original message.
+          loki.process "pod_logs" {
+            stage.cri {}
+
+            forward_to = [loki.write.default.receiver]
+          }
+
+          loki.write "default" {
+            endpoint {
+              url = "http://loki-gateway.logging.svc.cluster.local/loki/api/v1/push"
+            }
+          }
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring
