@@ -52,6 +52,10 @@ applicationsets:
           syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+          # Without this, ignoreDifferences only hides drift from the diff:
+          # the next sync still writes the rendered value back over the one
+          # a controller set at runtime, and the controller flips it again.
+          - RespectIgnoreDifferences=true
           managedNamespaceMetadata:
             labels:
               istio.io/revy: stable
@@ -59,8 +63,16 @@ applicationsets:
       applicationsSync: sync
     goTemplate: true
     templatePatch: |
-      {{- if .helm }}
+      {{- if or .helm .ignoreDifferences }}
       spec:
+        {{- if .ignoreDifferences }}
+        # Optional per-app list, for fields a controller rewrites at runtime.
+        # Without it those apps sit OutOfSync forever and selfHeal fights the
+        # controller on every reconcile.
+        ignoreDifferences:
+          {{- toYaml .ignoreDifferences | nindent 10 }}
+        {{- end }}
+        {{- if .helm }}
         source:
           helm:
             releaseName: '{{.name}}'
@@ -74,6 +86,7 @@ applicationsets:
               - {{ $f }}
               {{- end }}
             {{- end }}
+        {{- end }}
       {{- end }}
   %{~ endfor ~}
 

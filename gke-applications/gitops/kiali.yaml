@@ -17,6 +17,12 @@ helm:
           memory: 1Gi
     auth:
       strategy: anonymous
+    # Left empty, the chart generates a random key on every render, so each
+    # repo-server cache miss changes the ConfigMap and the config checksum,
+    # shows the app OutOfSync and restarts Kiali. With auth.strategy
+    # anonymous no login tokens are issued, so the key guards nothing.
+    login_token:
+      signing_key: "CcRqw0m1NUxbrE6OtPjIEIKdcAiRAF1y"
     external_services:
       prometheus:
         url: http://prometheus-monitoring-kube-prometheus.monitoring:9090
