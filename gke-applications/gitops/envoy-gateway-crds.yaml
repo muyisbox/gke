@@ -1,0 +1,13 @@
+name: envoy-gateway-crds
+chart: gateway-crds-helm
+repoURL: oci://docker.io/envoyproxy
+targetRevision: "v1.9.1"
+namespace: envoy-gateway-system
+cluster_env: gitops
+helm:
+  values:
+    crds:
+      gatewayAPI:
+        enabled: true
+      envoyGateway:
+        enabled: true

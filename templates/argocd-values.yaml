@@ -23,12 +23,24 @@ server:
   serviceAccount:
     annotations:
       iam.gke.io/gcp-service-account: ${gcp_service_account}
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring
 
 controller:
   replicas: 2
   serviceAccount:
     annotations:
       iam.gke.io/gcp-service-account: ${gcp_service_account}
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring
 
 repoServer:
   autoscaling:
@@ -41,7 +53,7 @@ repoServer:
   # repo-server Service.
   resources:
     requests:
-      cpu: 250m
+      cpu: 150m
       memory: 512Mi
     limits:
       memory: 2Gi
@@ -53,9 +65,26 @@ repoServer:
   readinessProbe:
     timeoutSeconds: 10
     failureThreshold: 5
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring
 
 applicationSet:
   replicaCount: 2
-
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring
 redis-ha:
   enabled: true
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring

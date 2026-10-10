@@ -47,7 +47,11 @@ helm:
           storageLocation: default
           ttl: 720h
     deployNodeAgent: true
+    # A backup agent idles between nightly runs; half a core reserved around
+    # the clock was never justified by its actual usage.
     resources:
       requests:
-        cpu: 500m
+        cpu: 100m
         memory: 256Mi
+      limits:
+        memory: 512Mi

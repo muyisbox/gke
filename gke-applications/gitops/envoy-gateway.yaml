@@ -1,0 +1,35 @@
+name: envoy-gateway
+chart: gateway-helm
+repoURL: oci://docker.io/envoyproxy
+targetRevision: "v1.9.1"
+namespace: envoy-gateway-system
+cluster_env: gitops
+helm:
+  values:
+    crds:
+      enabled: false
+    deployment:
+      replicas: 2
+      pod:
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchExpressions:
+                      - key: control-plane
+                        operator: In
+                        values:
+                          - envoy-gateway
+                  topologyKey: kubernetes.io/hostname
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
