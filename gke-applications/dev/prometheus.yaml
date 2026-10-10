@@ -6,13 +6,18 @@ namespace: monitoring
 cluster_env: dev
 helm:
   values:
-    # Helm never upgrades CRDs on `helm upgrade`. Every chart major from
-    # 83 to 91 ships a newer prometheus-operator CRD set, so let the chart
-    # run its own CRD upgrade job instead of applying them by hand.
+    # The chart's CRD upgrade job exists because `helm upgrade` never
+    # touches CRDs. Nothing here runs `helm upgrade`: Argo renders the
+    # chart with --include-crds and applies all ten CRDs itself with
+    # server-side apply, which the app's managed-resource list confirms.
+    # Rendering with the job on and off produces the same ten CRDs, so it
+    # buys nothing -- and it costs: the sync parks indefinitely on
+    # "waiting for completion of hook ClusterRoleBinding/
+    # prometheus-monitoring-crds-upgrade", and the hook pulls
+    # docker.io/busybox:latest, which these clusters cannot pull
+    # anonymously (the same 401 that stops envoy-gateway refreshing).
     crds:
-      upgradeJob:
-        enabled: true
-        forceConflicts: true
+      enabled: true
     alertmanager:
       alertmanagerSpec:
         replicas: 2
