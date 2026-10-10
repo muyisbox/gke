@@ -1,6 +1,10 @@
 name: envoy-gateway-crds
 chart: gateway-crds-helm
-repoURL: oci://docker.io/envoyproxy
+# Argo CD 3.x treats an oci:// repoURL as the full artifact path and
+# ignores `chart` when resolving it, so the bare namespace made it look up
+# a repository literally named "envoyproxy" -- Docker Hub answers that
+# with 401, and the app never deployed.
+repoURL: oci://docker.io/envoyproxy/gateway-crds-helm
 targetRevision: "v1.9.1"
 namespace: envoy-gateway-system
 cluster_env: gitops
