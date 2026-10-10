@@ -50,6 +50,9 @@ helm:
     # VPC-wide without exposing traces to the internet.
     service:
       type: LoadBalancer
+      # Pinned to the address reserved in shared-network.tf. Spoke collectors
+      # hardcode this, so it has to survive a hub rebuild.
+      loadBalancerIP: "10.30.127.200"
       annotations:
         networking.gke.io/load-balancer-type: "Internal"
     serviceMonitor:

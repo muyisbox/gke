@@ -122,6 +122,12 @@ variable "node_drain_wait" {
   default     = "180s"
 }
 
+variable "observability_hub_ip" {
+  description = "Static internal address for the hub's telemetry LoadBalancer. Spokes target this, so it must stay stable across cluster rebuilds. Must sit inside the gitops entry's node_cidr and outside the range GKE allocates node addresses from."
+  type        = string
+  default     = "10.30.127.200"
+}
+
 variable "release_channel" {
   description = "GKE release channel for control plane and node upgrades."
   type        = string

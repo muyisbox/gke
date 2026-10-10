@@ -1,0 +1,120 @@
+name: otel-kube-stack
+# Replaces Alloy. One agent emitting logs, traces and Kubernetes events with a
+# single resource-attribute model, so a pod's logs and its traces are keyed
+# identically and can be correlated. Alloy could collect logs but gave no path
+# to traces without a second pipeline whose labels would have to be kept in
+# agreement by hand.
+chart: opentelemetry-kube-stack
+repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+targetRevision: "0.24.3"
+namespace: opentelemetry
+cluster_env: dev
+helm:
+  values:
+    # Becomes k8s.cluster.name on every signal. The chart defaults this to
+    # "unknown_k8s_cluster"; with three clusters reporting to one hub it is the
+    # attribute that says where anything came from.
+    clusterName: dev
+
+    collectors:
+      daemon:
+        presets:
+          logsCollection:
+            enabled: true
+          kubernetesAttributes:
+            enabled: true
+          kubernetesEvents:
+            enabled: true
+          resourceDetection:
+            env:
+              enabled: true
+            k8s_api:
+              enabled: true
+          # kube-prometheus-stack already scrapes all of these. Leaving them on
+          # would double-collect every node and cluster metric and double the
+          # Prometheus bill for nothing.
+          hostMetrics:
+            enabled: false
+          kubeletMetrics:
+            enabled: false
+          clusterMetrics:
+            enabled: false
+
+        config:
+          exporters:
+            # Traces live only on the hub, so a trace outlives the cluster that
+            # produced it. hub's reserved internal LB, reachable across the shared VPC.
+            otlp/tempo:
+              endpoint: 10.30.127.200:4317
+              tls:
+                insecure: true
+            # Loki 3.x ingests OTLP natively, so no Loki-specific exporter.
+            otlphttp/loki:
+              endpoint: http://loki-gateway.logging.svc.cluster.local/otlp
+          # Only exporters are set. The chart builds receivers and processors
+          # from the presets above and overrides anything named here, so
+          # listing them would imply a control that does not exist.
+          service:
+            pipelines:
+              # Dropped entirely. kube-prometheus-stack owns metrics, and the
+              # chart's default metrics pipeline exports to the debug exporter,
+              # which logs every datapoint -- which file_log then collects and
+              # ships to Loki. A feedback loop of its own noise.
+              metrics: null
+              traces:
+                exporters: [otlp/tempo]
+              logs:
+                exporters: [otlphttp/loki]
+
+    # Applied to the collector CRs the chart generates.
+    defaultCRConfig:
+      # A collector that cannot schedule is a blind spot, and these nodes run
+      # hot. Same reasoning as #52 for Alloy.
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    # The operator is not optional here. This chart ships an
+    # OpenTelemetryCollector custom resource rather than a DaemonSet directly,
+    # and without the operator to reconcile it the CR is inert and nothing
+    # collects anything.
+    opentelemetry-operator:
+      enabled: true
+    # Auto-instrumentation of application code is a separate concern and
+    # nothing here is instrumented yet.
+    instrumentation:
+      enabled: false
+
+    # system-node-critical above is rejected in any namespace lacking a quota
+    # whose scopeSelector matches it -- GKE only ships gcp-critical-pods in
+    # kube-system and its own managed namespaces. Same thing that bit Alloy in
+    # #52. pods: 1G mirrors GKE's: present, not limiting.
+    extraObjects:
+      - apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: critical-pods
+          namespace: opentelemetry
+        spec:
+          hard:
+            pods: 1G
+          scopeSelector:
+            matchExpressions:
+              - operator: In
+                scopeName: PriorityClass
+                values:
+                  - system-node-critical
+                  - system-cluster-critical
+
+    # kube-prometheus-stack owns both already; a second copy of node-exporter
+    # would collide on its hostPort.
+    kubeStateMetrics:
+      enabled: false
+    nodeExporter:
+      enabled: false

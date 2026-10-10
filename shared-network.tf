@@ -86,3 +86,26 @@ resource "time_sleep" "node_drain" {
   create_duration  = "0s"
   destroy_duration = var.node_drain_wait
 }
+
+# Fixed address for the hub's observability ingress.
+#
+# Spokes ship telemetry to the hub across the shared VPC, so they need an
+# endpoint that survives a cluster rebuild. An internal LoadBalancer picks a
+# fresh IP each time it is recreated, which would mean editing every spoke's
+# collector config after each teardown. Reserving the address pins it, and the
+# Tempo Service claims it by loadBalancerIP.
+#
+# Taken from the top of the gitops node CIDR, well clear of the node addresses
+# GKE allocates from the bottom.
+resource "google_compute_address" "observability_hub" {
+  count = local.is_gitops ? 1 : 0
+
+  name         = "observability-hub-ilb"
+  project      = var.project_id
+  region       = var.region
+  subnetwork   = local.subnet_name
+  address_type = "INTERNAL"
+  address      = var.observability_hub_ip
+
+  depends_on = [module.shared-network]
+}
