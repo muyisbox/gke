@@ -1,0 +1,58 @@
+name: tempo
+# Traces backend for the hub. The cluster has had no tracing at all; Istio
+# already emits Envoy spans, so this gives distributed tracing without any
+# application instrumentation.
+#
+# Hub only. Spokes ship traces here rather than each keeping their own, so a
+# trace survives the nightly destroy of the cluster that produced it.
+chart: tempo
+repoURL: https://grafana-community.github.io/helm-charts
+targetRevision: "3.1.0"
+namespace: tracing
+cluster_env: gitops
+helm:
+  values:
+    tempo:
+      # OTLP is what everything here speaks. The chart's Jaeger receivers stay
+      # enabled whether we want them or not: Helm merges maps so listing otlp
+      # alone does not displace them, and setting jaeger to null fails the
+      # render outright because _ports.tpl dereferences
+      # receivers.jaeger.protocols.thrift_http unconditionally. They are
+      # reachable only in-cluster, so this is noise rather than exposure.
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+      retention: 168h # 7d
+      storage:
+        trace:
+          backend: local
+          local:
+            path: /var/tempo/traces
+          wal:
+            path: /var/tempo/wal
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          memory: 2Gi
+    # Local backend means the PVC is the storage. Without this the StatefulSet
+    # uses emptyDir and every restart loses the trace history.
+    persistence:
+      enabled: true
+      size: 20Gi
+    # Spokes are in other clusters on the same shared VPC, so a ClusterIP is
+    # not reachable from them. An internal passthrough LB is addressable
+    # VPC-wide without exposing traces to the internet.
+    service:
+      type: LoadBalancer
+      annotations:
+        networking.gke.io/load-balancer-type: "Internal"
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prometheus-monitoring

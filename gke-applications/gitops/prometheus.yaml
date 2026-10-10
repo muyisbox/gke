@@ -27,6 +27,12 @@ helm:
                   storage: 5Gi
     grafana:
       additionalDataSources:
+        - name: Tempo
+          access: proxy
+          orgId: 1
+          type: tempo
+          url: http://tempo.tracing.svc.cluster.local:3200
+          version: 1
         - name: Loki
           access: proxy
           orgId: 1
