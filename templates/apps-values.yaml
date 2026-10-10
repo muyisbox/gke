@@ -34,6 +34,21 @@ applicationsets:
           automated:
             prune: true
             selfHeal: true
+          # Apps here install CRDs that sibling apps' manifests depend on, and
+          # nothing orders them. A ServiceMonitor applied before
+          # kube-prometheus-stack lands, or a Certificate applied before
+          # cert-manager's webhook has endpoints, fails -- and after five
+          # internal attempts Argo stops, leaving the app permanently broken
+          # with no further retries. On a cluster that is destroyed and rebuilt
+          # nightly that turns a startup race into whichever apps lost the race
+          # that morning. This keeps retrying for ~1h so the dependency
+          # eventually appears and the sync completes on its own.
+          retry:
+            limit: 20
+            backoff:
+              duration: 15s
+              factor: 2
+              maxDuration: 5m
           syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

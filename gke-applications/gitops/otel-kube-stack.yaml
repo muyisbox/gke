@@ -110,9 +110,17 @@ helm:
               # Metrics arrive by Prometheus remote-write, not OTLP, so this
               # collector has no metrics pipeline to run.
               metrics: null
+              # receivers is mandatory on every pipeline. The daemon collector
+              # can leave it out because its logsCollection and kubernetesEvents
+              # presets inject receivers for it; the gateway runs with every
+              # preset off, so nothing injects anything and the operator rejects
+              # the CR outright with "spec.config.service.pipelines.logs
+              # .receivers: Required value".
               traces:
+                receivers: [otlp]
                 exporters: [otlp/tempo]
               logs:
+                receivers: [otlp]
                 exporters: [otlphttp/loki]
 
     # Applied to the collector CRs the chart generates.
