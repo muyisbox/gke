@@ -7,15 +7,6 @@ cluster_env: gitops
 helm:
   values:
     pilot:
-      # The chart defaults to 500m/2Gi per replica and autoscaleMin is 2, so
-      # istiod alone reserved a full core and 4Gi across the cluster. A mesh
-      # this size does not need it; HPA still scales out under real load.
-      resources:
-        requests:
-          cpu: 200m
-          memory: 1024Mi
-        limits:
-          memory: 2048Mi
       autoscaleEnabled: true
       autoscaleMin: 2
       autoscaleMax: 4
