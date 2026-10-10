@@ -45,13 +45,9 @@ helm:
     persistence:
       enabled: true
       size: 20Gi
-    # Spokes are in other clusters on the same shared VPC, so a ClusterIP is
-    # not reachable from them. An internal passthrough LB is addressable
-    # VPC-wide without exposing traces to the internet.
-    service:
-      type: LoadBalancer
-      annotations:
-        networking.gke.io/load-balancer-type: "Internal"
+    # ClusterIP on purpose. Spokes never reach Tempo directly -- they ship OTLP
+    # to the hub's gateway collector, which is the only telemetry ingress on
+    # the VPC. One door to secure instead of one per signal.
     serviceMonitor:
       enabled: true
       additionalLabels:

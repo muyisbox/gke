@@ -86,3 +86,42 @@ resource "time_sleep" "node_drain" {
   create_duration  = "0s"
   destroy_duration = var.node_drain_wait
 }
+
+# Fixed address for the hub's observability ingress.
+#
+# Spokes ship telemetry to the hub across the shared VPC, so they need an
+# endpoint that survives a cluster rebuild. An internal LoadBalancer picks a
+# fresh IP each time it is recreated, which would mean editing every spoke's
+# collector config after each teardown. Reserving the address pins it, and the
+# Tempo Service claims it by loadBalancerIP.
+#
+# Taken from the top of the gitops node CIDR, well clear of the node addresses
+# GKE allocates from the bottom.
+resource "google_compute_address" "observability_hub" {
+  count = local.is_gitops ? 1 : 0
+
+  name         = "observability-hub-otlp-ilb"
+  project      = var.project_id
+  region       = var.region
+  subnetwork   = local.subnet_name
+  address_type = "INTERNAL"
+  address      = var.observability_hub_ip
+
+  depends_on = [module.shared-network]
+}
+
+# Second fixed address, for Prometheus remote-write. Metrics take their own
+# path rather than the OTLP gateway so kube-prometheus-stack keeps doing its
+# own scraping and ServiceMonitor discovery; only the write is redirected.
+resource "google_compute_address" "metrics_hub" {
+  count = local.is_gitops ? 1 : 0
+
+  name         = "observability-hub-metrics-ilb"
+  project      = var.project_id
+  region       = var.region
+  subnetwork   = local.subnet_name
+  address_type = "INTERNAL"
+  address      = var.metrics_hub_ip
+
+  depends_on = [module.shared-network]
+}
