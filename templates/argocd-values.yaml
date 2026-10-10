@@ -1,6 +1,11 @@
 configs:
   cm:
     exec.enabled: true
+  params:
+    # Two controller replicas, but the default (legacy) hash sharding put
+    # every cluster on shard 1: controller-1 ran at ~900m CPU / 2.4Gi while
+    # controller-0 idled at 9m. Round-robin spreads the three clusters 2/1.
+    controller.sharding.algorithm: round-robin
   repositories:
     gke-gitops-repo:
       url: ${repo_url}
@@ -32,6 +37,18 @@ server:
 
 controller:
   replicas: 2
+  # Ran as BestEffort, so the scheduler packed it onto a node already at
+  # 102% CPU / 108% memory as if it cost nothing. Starved, its Lua health
+  # checks on the large prometheus-operator, Istio and Rollouts CRDs hit
+  # "context deadline exceeded", which aborts the whole sync -- that is
+  # what held the Prometheus CRs (externalLabels, remote-write) back after
+  # every other blocker was fixed. Requests sized to what it actually uses.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 3Gi
   serviceAccount:
     annotations:
       iam.gke.io/gcp-service-account: ${gcp_service_account}
