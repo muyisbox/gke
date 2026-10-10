@@ -11,6 +11,13 @@ namespace: opentelemetry
 cluster_env: dev
 helm:
   values:
+    # kube-prometheus-stack owns the prometheus-operator CRDs. This chart
+    # bundles its own older copy (0.92.0 against 0.94.0), so the two apps
+    # overwrote each other on every sync and left dev and staging running
+    # the 0.94 operator against downgraded 0.92 CRDs. Only the OTel CRDs
+    # come from here.
+    crds:
+      installPrometheus: false
     # Becomes k8s.cluster.name on every signal. The chart defaults this to
     # "unknown_k8s_cluster"; with three clusters reporting to one hub it is the
     # attribute that says where anything came from.
