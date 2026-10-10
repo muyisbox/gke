@@ -4,6 +4,13 @@ repoURL: https://istio-release.storage.googleapis.com/charts
 targetRevision: "1.30.5"
 namespace: istio-system
 cluster_env: gitops
+# istiod rewrites its validating webhook's failurePolicy from the chart's
+# Ignore to Fail once it is serving, so the rendered value never matches.
+ignoreDifferences:
+  - group: admissionregistration.k8s.io
+    kind: ValidatingWebhookConfiguration
+    jqPathExpressions:
+      - .webhooks[]?.failurePolicy
 helm:
   values:
     pilot:
