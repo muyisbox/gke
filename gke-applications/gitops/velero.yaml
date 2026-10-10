@@ -24,11 +24,18 @@ helm:
           # Every cluster shares one bucket; without a per-cluster prefix they
           # write into the same backup namespace and overwrite each other.
           prefix: gitops
+          # The GCP plugin will not authenticate from Workload Identity
+          # alone: without this the location reports Unavailable with
+          # "serviceAccount is expected to be provided as an item in
+          # BackupStorageLocation's config" and no backup ever runs.
+          config:
+            serviceAccount: velero-controller@cluster-dreams.iam.gserviceaccount.com
       volumeSnapshotLocation:
         - name: default
           provider: gcp
           config:
             region: us-central1
+            serviceAccount: velero-controller@cluster-dreams.iam.gserviceaccount.com
     # Auth comes from Workload Identity (see velero.tf), not a key file.
     credentials:
       useSecret: false
