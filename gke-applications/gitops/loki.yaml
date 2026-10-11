@@ -65,6 +65,17 @@ helm:
         delete_request_store: gcs
       limits_config:
         retention_period: 168h
+        # Every signal names its source cluster `cluster` (gitops, dev,
+        # staging): the collectors set it as an OTLP resource attribute.
+        # Loki indexes only a fixed default list of resource attributes and
+        # keeps the rest as structured metadata, which a stream selector
+        # cannot use -- so `{cluster="dev"}` would match nothing. Added to
+        # that list, not replacing it (ignore_defaults stays false).
+        otlp_config:
+          resource_attributes:
+            attributes_config:
+              - action: index_label
+                attributes: [cluster]
     # The only memberlist peers are Loki's own pods; the headless Service
     # must publish them before they are Ready or the first pod can never join
     # a ring and become Ready to publish itself.

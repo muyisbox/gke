@@ -1,9 +1,8 @@
 name: mimir
-# Long-term metrics store for the hub, on GCS. Runs ALONGSIDE Prometheus for
-# now: every collector and Tempo's metrics generator write to both, and
-# Grafana has Mimir as a second, non-default datasource, so the two can be
-# compared on the same data before anything is cut over. Prometheus is
-# unchanged.
+# Metrics store for every cluster, on GCS, replacing the hub Prometheus:
+# Grafana's default datasource, the ruler and Alertmanager for every
+# PrometheusRule, and -- through mimir-query-ilb -- the store each spoke's
+# Kiali queries across the VPC.
 chart: mimir-distributed
 repoURL: https://grafana.github.io/helm-charts
 targetRevision: "6.2.1" # Mimir 3.2.1
@@ -207,8 +206,9 @@ helm:
       # Downloads a day's blocks to compact them.
       persistentVolume:
         size: 20Gi
-    # Ruler and Alertmanager run but hold nothing yet: alerting stays on
-    # Prometheus until the PrometheusRules are migrated separately.
+    # The ruler evaluates every PrometheusRule in the hub (Alloy syncs them
+    # in; the kubernetes-mixin app ships the bundled set) and sends alerts to
+    # the Alertmanager below, which the chart already wires up.
     ruler:
       replicas: 1
       resources:
@@ -221,6 +221,38 @@ helm:
       replicas: 1
       zoneAwareReplication:
         enabled: false
+      # Used while the tenant has no configuration of its own -- which is
+      # always, until one is uploaded. There is NO notification target yet
+      # (no Slack, email or pager): every alert routes to "null" and is only
+      # visible in Grafana's alerting view and the Alertmanager UI. Grouping
+      # and inhibitions are kube-prometheus-stack's defaults, with `cluster`
+      # added so one cluster's critical alert cannot silence another's warning.
+      fallbackConfig: |
+        global:
+          resolve_timeout: 5m
+        route:
+          receiver: "null"
+          group_by: [cluster, namespace]
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 12h
+          routes:
+            # Always firing, by design: proves the alert path end to end.
+            - receiver: "null"
+              matchers: ['alertname = "Watchdog"']
+        inhibit_rules:
+          - source_matchers: ['severity = "critical"']
+            target_matchers: ['severity =~ "warning|info"']
+            equal: [cluster, namespace, alertname]
+          - source_matchers: ['severity = "warning"']
+            target_matchers: ['severity = "info"']
+            equal: [cluster, namespace, alertname]
+          - source_matchers: ['alertname = "InfoInhibitor"']
+            target_matchers: ['severity = "info"']
+            equal: [cluster, namespace]
+          - target_matchers: ['alertname = "InfoInhibitor"']
+        receivers:
+          - name: "null"
       resources:
         requests:
           cpu: 20m
@@ -272,3 +304,29 @@ helm:
         clusterLabel: null
         labels:
           release: prometheus-monitoring
+
+    # Spoke Kialis query their cluster's Istio metrics from here, across the
+    # VPC. The address is reserved in shared-network.tf so it outlives a hub
+    # rebuild. It is the one the hub Prometheus Service held, so the spokes'
+    # Kiali config barely changes; GCP lets one forwarding rule hold it at a
+    # time, so this Service stays pending until that one is deleted. Meant
+    # for queries -- spokes still write through the OTLP gateway.
+    extraObjects:
+      - apiVersion: v1
+        kind: Service
+        metadata:
+          name: mimir-query-ilb
+          annotations:
+            networking.gke.io/load-balancer-type: "Internal"
+        spec:
+          type: LoadBalancer
+          loadBalancerIP: "10.30.127.201"
+          selector:
+            app.kubernetes.io/name: mimir
+            app.kubernetes.io/instance: mimir
+            app.kubernetes.io/component: gateway
+          ports:
+            - name: http
+              port: 80
+              targetPort: http-metrics
+              protocol: TCP
