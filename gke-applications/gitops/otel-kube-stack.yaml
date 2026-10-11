@@ -72,6 +72,13 @@ helm:
               endpoint: tempo.tracing.svc.cluster.local:4317
               tls:
                 insecure: true
+              # Rides out a Tempo restart instead of dropping after 5m.
+              retry_on_failure:
+                enabled: true
+                max_elapsed_time: 15m
+              sending_queue:
+                enabled: true
+                queue_size: 5000
             # Loki 3.x ingests OTLP natively, so no Loki-specific exporter.
             otlp_http/loki:
               endpoint: http://loki-gateway.logging.svc.cluster.local/otlp
@@ -350,6 +357,13 @@ helm:
               endpoint: tempo.tracing.svc.cluster.local:4317
               tls:
                 insecure: true
+              # Rides out a Tempo restart instead of dropping after 5m.
+              retry_on_failure:
+                enabled: true
+                max_elapsed_time: 15m
+              sending_queue:
+                enabled: true
+                queue_size: 5000
             otlp_http/loki:
               endpoint: http://loki-gateway.logging.svc.cluster.local/otlp
               # Covers a Loki rollout or restart (the write ring re-forming), so

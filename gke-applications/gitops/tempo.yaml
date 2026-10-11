@@ -59,11 +59,14 @@ helm:
           metrics_generator:
             processors: [span-metrics, service-graphs]
         per_tenant_override_config: /conf/overrides.yaml
+      # Blocks go to GCS, so trace history no longer lives on one pod's disk
+      # and survives the node, zone or cluster. Only the WAL -- the last few
+      # minutes before a block is cut -- stays on the local volume.
       storage:
         trace:
-          backend: local
-          local:
-            path: /var/tempo/traces
+          backend: gcs
+          gcs:
+            bucket_name: cluster-dreams-tempo
           wal:
             path: /var/tempo/wal
       resources:
@@ -72,8 +75,14 @@ helm:
           memory: 512Mi
         limits:
           memory: 2Gi
-    # Local backend means the PVC is the storage. Without this the StatefulSet
-    # uses emptyDir and every restart loses the trace history.
+    # Workload Identity to tempo-storage, which can read and write only the
+    # Tempo bucket (observability-storage.tf).
+    serviceAccount:
+      name: tempo
+      annotations:
+        iam.gke.io/gcp-service-account: tempo-storage@cluster-dreams.iam.gserviceaccount.com
+    # Holds the WAL. Without it a restart would lose the traces not yet cut
+    # into a block and shipped to GCS.
     persistence:
       enabled: true
       size: 20Gi
