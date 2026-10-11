@@ -53,6 +53,17 @@ resource "google_storage_bucket_iam_member" "observability" {
   member = "serviceAccount:${google_service_account.observability[each.key].email}"
 }
 
+# objectAdmin covers objects only. Tempo reads the bucket's own metadata at
+# startup (storage.buckets.get) and crash-looped with a 403 without it;
+# granted to every backend so Mimir does not hit the same wall.
+resource "google_storage_bucket_iam_member" "observability_bucket_metadata" {
+  for_each = local.observability_storage
+
+  bucket = google_storage_bucket.observability[each.key].name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.observability[each.key].email}"
+}
+
 resource "google_service_account_iam_member" "observability_workload_identity" {
   for_each = local.observability_storage
 
