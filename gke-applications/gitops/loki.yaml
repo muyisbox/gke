@@ -10,13 +10,18 @@ cluster_env: gitops
 istioInjection: disabled
 helm:
   values:
+    # Off. The canary writes a test line into Loki every second from every
+    # node and reads it back, reporting the result as loki_canary_* metrics.
+    # Nothing here consumed them -- no alert rule, no dashboard -- while its
+    # lines, which carry no level, were 91% of all logs Grafana showed as
+    # level "unknown". Loki's health is still covered by its own
+    # ServiceMonitor metrics and probes.
     lokiCanary:
-      # The canary pushes its test lines straight to Loki, labelled by
-      # <labelname>=<pod name>. With the chart's `pod`, Loki's OTLP-era
-      # service_name grouping had nothing to go on and filed the canary --
-      # most of the log volume -- under unknown_service. Its read-back
-      # queries use the same label, so it keeps working.
-      labelname: service_name
+      enabled: false
+    # The chart's Helm test drives the canary, and the chart refuses to render
+    # with one but not the other. Argo CD never runs Helm tests anyway.
+    test:
+      enabled: false
     # "SingleBinary" is the deprecated spelling of this mode.
     deploymentMode: Monolithic
     loki:

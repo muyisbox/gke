@@ -169,7 +169,8 @@ helm:
             # Many formats carry no level Loki can read, so Grafana showed them
             # as "unknown": klog (I/W/E/F prefix), and access logs, whose only
             # signal is the HTTP status. Classified here, once, the same on
-            # every cluster. Tested against each format on the 0.159.0 image.
+            # every cluster. Tested against each format on the 0.159.0 image,
+            # including controls (plain text and look-alikes stay unclassified).
             transform/severity:
               error_mode: ignore
               log_statements:
@@ -185,6 +186,14 @@ helm:
                     - set(severity_text, "WARN") where IsMatch(body, "^W[0-9]{4} ")
                     - set(severity_text, "ERROR") where IsMatch(body, "^E[0-9]{4} ")
                     - set(severity_text, "FATAL") where IsMatch(body, "^F[0-9]{4} ")
+                    # zerolog console format (Kiali, kyverno): "<time> INF msg", where
+                    # kyverno wraps the time and level in terminal colour codes. [[]
+                    # matches a literal "[" without an escape OTTL may not accept.
+                    - set(severity_text, "INFO") where IsMatch(body, "^[^ ]+ ([^ ]*[[][0-9;]*m)?INF([^ ]*[[][0-9;]*m)? ")
+                    - set(severity_text, "WARN") where IsMatch(body, "^[^ ]+ ([^ ]*[[][0-9;]*m)?WRN([^ ]*[[][0-9;]*m)? ")
+                    - set(severity_text, "ERROR") where IsMatch(body, "^[^ ]+ ([^ ]*[[][0-9;]*m)?ERR([^ ]*[[][0-9;]*m)? ")
+                    - set(severity_text, "DEBUG") where IsMatch(body, "^[^ ]+ ([^ ]*[[][0-9;]*m)?DBG([^ ]*[[][0-9;]*m)? ")
+                    - set(severity_text, "FATAL") where IsMatch(body, "^[^ ]+ ([^ ]*[[][0-9;]*m)?FTL([^ ]*[[][0-9;]*m)? ")
                     # Access logs carry no level, only a status. Three shapes: Istio/Envoy
                     # JSON ("response_code":503), standard nginx ("GET / HTTP/1.1" 503),
                     # and Loki's gateway, which logs the status first ("...+0000]  503
@@ -198,6 +207,7 @@ helm:
                     - set(severity_number, SEVERITY_NUMBER_WARN) where severity_text == "WARN"
                     - set(severity_number, SEVERITY_NUMBER_ERROR) where severity_text == "ERROR"
                     - set(severity_number, SEVERITY_NUMBER_FATAL) where severity_text == "FATAL"
+                    - set(severity_number, SEVERITY_NUMBER_DEBUG) where severity_text == "DEBUG"
             transform/events:
               # A labelling step must never cost data: with the default
               # (propagate), one statement erroring on an oddly-shaped event
@@ -236,7 +246,7 @@ helm:
           exporters:
             # The hub's gateway is the only telemetry endpoint a spoke knows;
             # it fans out to Prometheus, Loki and Tempo on the far side.
-            otlp/hub:
+            otlp_grpc/hub:
               endpoint: 10.30.127.200:4317
               tls:
                 insecure: true
@@ -254,16 +264,16 @@ helm:
               metrics:
                 receivers: [prometheus/kubelet, otlp]
                 processors: [transform/cluster, batch]
-                exporters: [otlp/hub]
+                exporters: [otlp_grpc/hub]
               traces:
-                exporters: [otlp/hub]
+                exporters: [otlp_grpc/hub]
               # Declaring processors replaces the chart's preset list rather
               # than adding to it, so the whole chain is spelled out --
               # dropping resource_detection/env would strip k8s.cluster.name
               # from every log. transform/events must run after it.
               logs:
                 processors: [k8s_attributes, resource_detection/env, resource/hostname, transform/events, transform/severity, batch]
-                exporters: [otlp/hub]
+                exporters: [otlp_grpc/hub]
 
       # One per cluster: everything that has a ServiceMonitor or PodMonitor.
       # The target allocator reads those CRs the way a Prometheus server
@@ -300,7 +310,9 @@ helm:
             enabled: false
         resources:
           requests:
-            cpu: 100m
+            # Ran ~118m against a 100m request on the hub, which scrapes the
+            # most targets; under contention, scrapes timed out.
+            cpu: 200m
             memory: 512Mi
           limits:
             memory: 1Gi
@@ -318,7 +330,7 @@ helm:
                     - set(attributes["cluster"], "staging_cluster")
             batch: {}
           exporters:
-            otlp/hub:
+            otlp_grpc/hub:
               endpoint: 10.30.127.200:4317
               tls:
                 insecure: true
@@ -332,7 +344,7 @@ helm:
               metrics:
                 receivers: [prometheus]
                 processors: [transform/cluster, batch]
-                exporters: [otlp/hub]
+                exporters: [otlp_grpc/hub]
 
     # Applied to the collector CRs the chart generates.
     defaultCRConfig:
