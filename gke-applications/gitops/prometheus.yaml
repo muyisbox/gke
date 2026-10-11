@@ -78,6 +78,11 @@ helm:
       # The bundled dashboards gain a `cluster` selector. Without it every
       # panel silently sums dev, staging and the hub together.
       sidecar:
+        datasources:
+          # Exemplars on the default Prometheus datasource link to Tempo.
+          exemplarTraceIdDestinations:
+            datasourceUid: tempo
+            traceIdLabelName: traceID
         resources:
           requests:
             cpu: 10m
@@ -88,21 +93,76 @@ helm:
           multicluster:
             global:
               enabled: true
+      # Fixed UIDs: the cross-links below name their targets by UID, and
+      # without one each Grafana replica generated its own at random.
       additionalDataSources:
         - name: Tempo
+          uid: tempo
           access: proxy
           orgId: 1
           type: tempo
           url: http://tempo.tracing.svc.cluster.local:3200
           version: 1
+          jsonData:
+            # Span -> its pod's logs, around the span's time window. Spans
+            # carry the real pod, namespace and cluster (set by the
+            # collector from the sending pod), which Loki indexes as labels.
+            tracesToLogsV2:
+              datasourceUid: loki
+              spanStartTimeShift: "-5m"
+              spanEndTimeShift: "5m"
+              tags:
+                - key: k8s.cluster.name
+                  value: k8s_cluster_name
+                - key: k8s.namespace.name
+                  value: k8s_namespace_name
+                - key: k8s.pod.name
+                  value: k8s_pod_name
+            # Span -> its service's request rate and latency, from the span
+            # metrics Tempo's generator writes to Prometheus.
+            tracesToMetrics:
+              datasourceUid: prometheus
+              spanStartTimeShift: "-5m"
+              spanEndTimeShift: "5m"
+              tags:
+                - key: service.name
+                  value: service
+              queries:
+                - name: Request rate
+                  query: sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))
+                - name: p95 latency
+                  query: histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{$$__tags}[5m])))
+            # Service graph from the generator's service_graphs metrics.
+            serviceMap:
+              datasourceUid: prometheus
+            nodeGraph:
+              enabled: true
+            lokiSearch:
+              datasourceUid: loki
         - name: Loki
+          uid: loki
           access: proxy
           orgId: 1
           type: loki
-          jsonData:
-            tlsSkipVerify: true
           url: http://loki.logging.svc.cluster.local:3100
           version: 1
+          jsonData:
+            tlsSkipVerify: true
+            # Log line -> trace. The first matches the trace_id field in
+            # Istio's JSON access logs; the second, the trace_id that
+            # OTel-instrumented apps attach to their own log records.
+            derivedFields:
+              - name: TraceID
+                matcherRegex: '"trace_id":"([0-9a-f]{32})"'
+                url: "$${__value.raw}"
+                datasourceUid: tempo
+                urlDisplayLabel: View trace
+              - name: trace_id
+                matcherType: label
+                matcherRegex: trace_id
+                url: "$${__value.raw}"
+                datasourceUid: tempo
+                urlDisplayLabel: View trace
     prometheus:
       # Reserved in shared-network.tf. Nothing writes here any more -- metrics
       # arrive over OTLP through the gateway -- but each spoke's Kiali queries
@@ -119,6 +179,16 @@ helm:
         # label is set there, on every series, so no externalLabels are
         # needed to tell clusters apart.
         enableOTLPReceiver: true
+        # Tempo's metrics generator writes its span metrics and service graph
+        # here by remote-write (it has no OTLP output). It sends to each
+        # replica's pod address, inside the cluster.
+        enableRemoteWriteReceiver: true
+        # Keeps the exemplars Tempo attaches -- a trace ID per latency
+        # bucket -- which is what lets a Grafana graph link to the trace
+        # behind a data point. Off by default; without it they are dropped
+        # on arrival.
+        enableFeatures:
+          - exemplar-storage
         # Pushed data can land late: collector retries after a hub restart,
         # two gateway replicas interleaving. Without a window those samples
         # are refused as out of order and simply lost.
