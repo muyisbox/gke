@@ -9,6 +9,8 @@ repoURL: https://prometheus-community.github.io/helm-charts
 targetRevision: "32.0.0"
 namespace: monitoring
 cluster_env: staging
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
 helm:
   values:
     crds:

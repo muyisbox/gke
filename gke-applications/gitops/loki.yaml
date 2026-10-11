@@ -6,6 +6,8 @@ repoURL: https://grafana-community.github.io/helm-charts
 targetRevision: "18.13.5"
 namespace: logging
 cluster_env: gitops
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
 helm:
   values:
     # "SingleBinary" is the deprecated spelling of this mode.

@@ -56,15 +56,30 @@ applicationsets:
           # the next sync still writes the rendered value back over the one
           # a controller set at runtime, and the controller flips it again.
           - RespectIgnoreDifferences=true
+          # Selects istiod's `stable` revision tag, so every app namespace gets
+          # sidecars. Was misspelled `istio.io/revy` from the start, which
+          # matched no injection webhook: nothing in any cluster had a sidecar
+          # and the mesh was empty.
           managedNamespaceMetadata:
             labels:
-              istio.io/revy: stable
+              istio.io/rev: stable
     syncPolicy:
       applicationsSync: sync
     goTemplate: true
     templatePatch: |
-      {{- if or .helm .ignoreDifferences }}
+      {{- if or .helm .ignoreDifferences .istioInjection }}
       spec:
+        {{- if and .istioInjection (eq .istioInjection "disabled") }}
+        # Opt-out for the telemetry pipeline itself. With a sidecar on the
+        # collector, Tempo, Loki or Prometheus, every telemetry request is
+        # traced, and those spans flow back through the same components,
+        # producing more spans. A value matching no revision or tag selects
+        # no injection webhook. Maps merge, so the rest of syncPolicy stays.
+        syncPolicy:
+          managedNamespaceMetadata:
+            labels:
+              istio.io/rev: disabled
+        {{- end }}
         {{- if .ignoreDifferences }}
         # Optional per-app list, for fields a controller rewrites at runtime.
         # Without it those apps sit OutOfSync forever and selfHeal fights the
