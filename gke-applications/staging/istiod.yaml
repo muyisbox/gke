@@ -45,7 +45,30 @@ helm:
       defaultProviders:
         metrics: [prometheus]
         tracing: [otel-tracing]
+        accessLogging: [envoy-json]
       extensionProviders:
+        # One JSON line per request on stdout, collected into Loki like any
+        # container log. trace_id is what Grafana's Loki datasource turns
+        # into a link to the trace; only sampled requests (10%) have a trace
+        # in Tempo to link to.
+        - name: envoy-json
+          envoyFileAccessLog:
+            path: /dev/stdout
+            logFormat:
+              labels:
+                start_time: "%START_TIME%"
+                method: "%REQ(:METHOD)%"
+                path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+                protocol: "%PROTOCOL%"
+                response_code: "%RESPONSE_CODE%"
+                response_flags: "%RESPONSE_FLAGS%"
+                duration_ms: "%DURATION%"
+                bytes_sent: "%BYTES_SENT%"
+                authority: "%REQ(:AUTHORITY)%"
+                upstream_cluster: "%UPSTREAM_CLUSTER%"
+                upstream_host: "%UPSTREAM_HOST%"
+                request_id: "%REQ(X-REQUEST-ID)%"
+                trace_id: "%TRACE_ID%"
         # Each sidecar sends spans to the OTel collector on this cluster,
         # which forwards them to Tempo on the hub with everything else.
         - name: otel-tracing

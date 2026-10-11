@@ -29,6 +29,36 @@ helm:
             http:
               endpoint: 0.0.0.0:4318
       retention: 168h # 7d
+      # Derives request-rate, error and latency metrics from every span, and
+      # a service graph from client/server span pairs, and writes them to the
+      # hub Prometheus with exemplars: each latency bucket carries the ID of a
+      # real trace that landed in it, which is what lets a Grafana graph link
+      # straight to the trace. TraceQL metrics (Traces Drilldown) need none of
+      # this -- Tempo 3 serves them natively.
+      metricsGenerator:
+        enabled: true
+        processor:
+          span_metrics:
+            # Without these, every cluster's spans for a service collapse into
+            # one series. Labels become k8s_cluster_name / k8s_namespace_name.
+            dimensions: [k8s.cluster.name, k8s.namespace.name]
+          service_graphs:
+            dimensions: [k8s.cluster.name, k8s.namespace.name]
+        registry:
+          collection_interval: 15s
+        storage:
+          # Both replicas, by pod DNS name: pushed samples are not replicated
+          # between them, and through the Service each would get half.
+          remote_write:
+            - url: http://prometheus-prometheus-monitoring-kube-prometheus-0.prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/write
+              send_exemplars: true
+            - url: http://prometheus-prometheus-monitoring-kube-prometheus-1.prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/write
+              send_exemplars: true
+      overrides:
+        defaults:
+          metrics_generator:
+            processors: [span-metrics, service-graphs]
+        per_tenant_override_config: /conf/overrides.yaml
       storage:
         trace:
           backend: local
