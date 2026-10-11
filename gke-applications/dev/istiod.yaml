@@ -69,9 +69,10 @@ helm:
                 upstream_host: "%UPSTREAM_HOST%"
                 request_id: "%REQ(X-REQUEST-ID)%"
                 trace_id: "%TRACE_ID%"
-        # Each sidecar sends spans to the OTel collector on this cluster,
-        # which forwards them to Tempo on the hub with everything else.
+        # Each sidecar sends spans to the Alloy receiver on this cluster
+        # (k8s-monitoring.yaml), which forwards them to Tempo on the hub with
+        # everything else.
         - name: otel-tracing
           opentelemetry:
-            service: otel-kube-stack-daemon-collector.opentelemetry.svc.cluster.local
+            service: k8s-monitoring-alloy-receiver.alloy.svc.cluster.local
             port: 4317

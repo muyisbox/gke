@@ -1,0 +1,737 @@
+name: k8s-monitoring
+# The hub's telemetry layer: Grafana Alloy, deployed and wired by Grafana's
+# k8s-monitoring chart. It collects this cluster's metrics, logs, events and
+# Istio spans, and is the one OTLP ingress the spokes send theirs to; both go
+# straight to Mimir, Loki and Tempo beside it. Replaces otel-kube-stack (and
+# the kube-state-metrics/node-exporter from kube-prometheus-stack), which are
+# removed in a separate cutover -- see the notes on the exclusions below.
+chart: k8s-monitoring
+repoURL: https://grafana.github.io/helm-charts
+targetRevision: "4.5.3"
+namespace: alloy
+cluster_env: gitops
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
+helm:
+  values:
+    # Becomes `cluster` on every signal (see clusterLabels below). The plain
+    # cluster name: every hub dashboard, recording rule and alert selects on
+    # it.
+    cluster:
+      name: gitops
+
+    global:
+      scrapeInterval: 30s
+
+    # One destination per backend, all in-cluster. Batches are capped (one
+    # oversized gRPC message from a big scrape was rejected outright and
+    # lost), retries outlast a backend rollout (15m, not the default 5m), and
+    # the queue absorbs the gap. overwriteClusterLabel: false is what keeps
+    # spoke data labelled with the spoke: data arriving at the receiver below
+    # already carries its cluster, and only unlabelled (local) data gets
+    # "gitops".
+    destinations:
+      mimir:
+        type: otlp
+        protocol: http
+        # Mimir is set up for Prometheus 3 naming parity on OTLP ingest, so
+        # series keep the names the dashboards and rules expect.
+        url: http://mimir-gateway.mimir.svc.cluster.local/otlp
+        # One key for the cluster on every signal: `cluster` (a series label,
+        # a resource attribute on logs and spans; Loki indexes it). The
+        # chart's default also writes k8s.cluster.name -- k8s_cluster_name on
+        # metrics -- a second spelling of the same thing, so that is left
+        # out, and deleted if anything upstream set it.
+        clusterLabels: [cluster]
+        metrics: {enabled: true}
+        logs: {enabled: false}
+        traces: {enabled: false}
+        overwriteClusterLabel: false
+        retryOnFailure:
+          maxElapsedTime: 15m
+        sendingQueue:
+          queueSize: 5000
+        processors:
+          transform:
+            metrics:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+                - delete_key(attributes, "k8s_cluster_name")
+              datapoint:
+                - delete_key(attributes, "k8s.cluster.name")
+                - delete_key(attributes, "k8s_cluster_name")
+            logs:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+            traces:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+          batch:
+            size: 2048
+            maxSize: 4096
+          # Swapped for a percentage-based limiter in replaceComponent below.
+          memoryLimiter:
+            enabled: true
+            limit: 512MiB
+      # Loki 3.x ingests OTLP natively.
+      loki:
+        type: otlp
+        protocol: http
+        url: http://loki-gateway.logging.svc.cluster.local/otlp
+        clusterLabels: [cluster]
+        metrics: {enabled: false}
+        logs: {enabled: true}
+        traces: {enabled: false}
+        overwriteClusterLabel: false
+        retryOnFailure:
+          maxElapsedTime: 15m
+        sendingQueue:
+          queueSize: 5000
+        processors:
+          transform:
+            metrics:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+                - delete_key(attributes, "k8s_cluster_name")
+              datapoint:
+                - delete_key(attributes, "k8s.cluster.name")
+                - delete_key(attributes, "k8s_cluster_name")
+            logs:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+            traces:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+          batch:
+            size: 2048
+            maxSize: 4096
+          memoryLimiter:
+            enabled: true
+            limit: 512MiB
+      tempo:
+        type: otlp
+        protocol: grpc
+        url: tempo.tracing.svc.cluster.local:4317
+        clusterLabels: [cluster]
+        tls:
+          insecure: true
+        metrics: {enabled: false}
+        logs: {enabled: false}
+        traces: {enabled: true}
+        overwriteClusterLabel: false
+        retryOnFailure:
+          maxElapsedTime: 15m
+        sendingQueue:
+          queueSize: 5000
+        processors:
+          transform:
+            metrics:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+                - delete_key(attributes, "k8s_cluster_name")
+              datapoint:
+                - delete_key(attributes, "k8s.cluster.name")
+                - delete_key(attributes, "k8s_cluster_name")
+            logs:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+            traces:
+              resource:
+                - delete_key(attributes, "k8s.cluster.name")
+          batch:
+            size: 2048
+            maxSize: 4096
+          memoryLimiter:
+            enabled: true
+            limit: 512MiB
+
+    collectors:
+      # Cluster-wide scraping, split across two clustered replicas: each
+      # takes a share of the targets and picks up the other's if it goes.
+      alloy-metrics:
+        presets: [clustered, deployment]
+        controller:
+          replicas: 2
+        alloy:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            # Headroom for the Mimir queue during a backend stall; the
+            # memory limiter keeps the process below it.
+            limits:
+              memory: 1536Mi
+        configReloader:
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+      # What must run exactly once: Kubernetes Events (two replicas would
+      # send each event twice) and the PrometheusRule sync to Mimir's ruler.
+      alloy-singleton:
+        presets: [singleton]
+        alloy:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+        configReloader:
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+        # Every PrometheusRule in the cluster, from any namespace, becomes a
+        # rule group in Mimir's ruler under "alloy/<namespace>/<name>/...", so
+        # recording rules and alerts are evaluated against the data in Mimir.
+        # Rules deleted here are deleted there; nothing outside the prefix is
+        # touched. Multi-tenancy is off in Mimir, so the tenant is the default.
+        extraConfig: |
+          mimir.rules.kubernetes "rules" {
+            address                = "http://mimir-gateway.mimir.svc.cluster.local"
+            tenant_id              = "anonymous"
+            mimir_namespace_prefix = "alloy"
+          }
+      # Pod log files can only be read on their own node.
+      alloy-logs:
+        presets: [daemonset, filesystem-log-reader]
+        alloy:
+          mounts:
+            # GKE runs containerd: pod logs are under /var/log/pods, and the
+            # Docker path the preset also mounts does not exist on COS.
+            dockercontainers: false
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+        configReloader:
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+        controller:
+          # These nodes sit at ~90-99% requested CPU, and a DaemonSet pod is
+          # pinned to its node: without priority it stays Pending and that
+          # node's logs are simply missing (#52). Needs the quota below.
+          priorityClassName: system-node-critical
+          tolerations:
+            - operator: Exists
+      # The OTLP ingress: Istio sidecars' spans from this cluster, and every
+      # signal from the spokes through the internal load balancer below. The
+      # queues for all three backends live here, so it gets the most memory
+      # headroom, a memory limiter first in line (it refuses with a retryable
+      # error near the limit, so senders hold the data and retry instead of
+      # this pod being OOM-killed with everything queued -- which the old
+      # gateway was, during a Mimir ingester roll), two replicas minimum and
+      # a PDB so a drain never takes both.
+      alloy-receiver:
+        presets: [deployment]
+        controller:
+          replicas: 2
+          autoscaling:
+            horizontal:
+              enabled: true
+              minReplicas: 2
+              maxReplicas: 4
+              targetCPUUtilizationPercentage: 80
+              targetMemoryUtilizationPercentage: 80
+          podDisruptionBudget:
+            enabled: true
+            maxUnavailable: 1
+        alloy:
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
+        configReloader:
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+
+    # The chart's memory limiters only take an absolute size, but one
+    # destination's limiter runs in every collector that sends there, and
+    # those have different memory limits. Percentages of each pod's own
+    # limit fit all of them (the same 75/20 the OTel gateway ran).
+    replaceComponent:
+      - type: otelcol.processor.memory_limiter
+        name: mimir
+        content: |
+          check_interval         = "1s"
+          limit_percentage       = 75
+          spike_limit_percentage = 20
+
+          output {
+            metrics = [otelcol.exporter.otlphttp.mimir.input]
+          }
+      - type: otelcol.processor.memory_limiter
+        name: loki
+        content: |
+          check_interval         = "1s"
+          limit_percentage       = 75
+          spike_limit_percentage = 20
+
+          output {
+            logs = [otelcol.exporter.otlphttp.loki.input]
+          }
+      - type: otelcol.processor.memory_limiter
+        name: tempo
+        content: |
+          check_interval         = "1s"
+          limit_percentage       = 75
+          spike_limit_percentage = 20
+
+          output {
+            traces = [otelcol.exporter.otlp.tempo.input]
+          }
+
+    # kubelet, cAdvisor, apiserver, kube-dns and kube-state-metrics, under the
+    # job names the kubernetes-mixin dashboards and rules select on (the
+    # chart's defaults are Grafana Cloud's "integrations/kubernetes/*"). The
+    # chart's allow lists are off: they are tuned for Grafana Cloud's own
+    # dashboards, and the rules synced to Mimir need what the old collectors
+    # sent. Only the old collectors' drops are carried over.
+    clusterMetrics:
+      enabled: true
+      collector: alloy-metrics
+      kubelet:
+        jobLabel: kubelet
+        # The mixin tells /metrics and /metrics/cadvisor apart by this label.
+        extraDiscoveryRules: |
+          rule {
+            target_label = "metrics_path"
+            replacement  = "/metrics"
+          }
+        metricsTuning:
+          useDefaultAllowList: false
+      cadvisor:
+        jobLabel: kubelet
+        extraDiscoveryRules: |
+          rule {
+            target_label = "metrics_path"
+            replacement  = "/metrics/cadvisor"
+          }
+        # Series for a cgroup with no pod (system slices): never queried,
+        # and a large share of cAdvisor's output.
+        extraMetricProcessingRules: |
+          rule {
+            source_labels = ["id", "pod"]
+            regex         = ".+;"
+            action        = "drop"
+          }
+        metricsTuning:
+          useDefaultAllowList: false
+          # Pod-level series (empty container/image) and every network
+          # interface and filesystem device are kept, as before: the mixin's
+          # network and pod dashboards are built on them.
+          dropEmptyContainerLabels: false
+          dropEmptyImageLabels: false
+          normalizeUnnecessaryLabels: []
+          keepPhysicalFilesystemDevices: []
+          keepPhysicalNetworkDevices: []
+          excludeMetrics:
+            - container_cpu_(load_average_10s|system_seconds_total|user_seconds_total)
+            - container_fs_(io_current|reads_merged_total|sector_reads_total|sector_writes_total|writes_merged_total)
+            - container_memory_(mapped_file|swap)
+            - container_(file_descriptors|tasks_state|threads_max)
+            - container_spec.*
+      # Not scraped before either, and no dashboard uses it.
+      kubeletResource:
+        enabled: false
+      apiServer:
+        enabled: true
+        jobLabel: apiserver
+        # The same bucket thinning the old apiserver monitor applied: these
+        # are the bulk of the apiserver's series and no rule reads them.
+        extraMetricProcessingRules: |
+          rule {
+            source_labels = ["__name__", "le"]
+            regex         = "apiserver_request_duration_seconds_bucket;(0.15|0.2|0.3|0.35|0.4|0.45|0.6|0.7|0.8|0.9|1.25|1.5|1.75|2|3|3.5|4|4.5|6|7|8|9|15|25|40|50)"
+            action        = "drop"
+          }
+      # GKE runs kube-dns, not CoreDNS. The rest of the control plane is
+      # Google-managed and not scrapeable.
+      kubeDNS:
+        enabled: true
+        jobLabel: kube-dns
+      kube-state-metrics:
+        jobLabel: kube-state-metrics
+        metricsTuning:
+          useDefaultAllowList: false
+
+    # node-exporter, everything it exposes: the node-mixin rules and
+    # dashboards read well beyond the chart's minimal list.
+    hostMetrics:
+      enabled: true
+      collector: alloy-metrics
+      linuxHosts:
+        enabled: true
+        jobLabel: node-exporter
+        metricsTuning:
+          useDefaultAllowList: false
+          useIntegrationAllowList: false
+      windowsHosts:
+        enabled: false
+      energyMetrics:
+        enabled: false
+
+    # Deployed here now, rather than borrowed: the copies in
+    # kube-prometheus-stack (hub) and otel-kube-stack (spokes) go in the
+    # cutover. Both are scraped by the features above, not by ServiceMonitor.
+    telemetryServices:
+      kube-state-metrics:
+        deploy: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+      node-exporter:
+        deploy: true
+        # Binds hostPort 9100, as the outgoing node-exporter does: until the
+        # cutover removes that one, these pods stay Pending. The check would
+        # only say so at render time; Argo renders without cluster access.
+        portConflictCheck: false
+        # Same reason as alloy-logs: a node's metrics must not depend on
+        # spare CPU on that node.
+        priorityClassName: system-node-critical
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+
+    # Every ServiceMonitor and PodMonitor, in every namespace, except the
+    # ones that would scrape something a second time:
+    # - kube-state-metrics, node-exporter, kubelet, apiserver and kube-dns
+    #   monitors from kube-prometheus-stack and otel-kube-stack (covered by
+    #   clusterMetrics/hostMetrics above);
+    # - the opentelemetry namespace, whose envoy-stats and istiod monitors
+    #   are recreated in extraObjects below.
+    # These only match while the old stacks are installed.
+    prometheusOperatorObjects:
+      enabled: true
+      collector: alloy-metrics
+      serviceMonitors:
+        excludeNamespaces: [opentelemetry]
+        labelExpressions:
+          - key: app.kubernetes.io/name
+            operator: NotIn
+            values: [kube-state-metrics, prometheus-node-exporter]
+          - key: app
+            operator: NotIn
+            values:
+              - kube-prometheus-stack-kubelet
+              - kube-prometheus-stack-apiserver
+              - opentelemetry-kube-stack-apiserver
+              - opentelemetry-kube-stack-kube-dns
+      podMonitors:
+        excludeNamespaces: [opentelemetry]
+
+    # Kubernetes Events, once (singleton). The job becomes service_name in
+    # Loki, so they are filed under "kubernetes-events" as before.
+    clusterEvents:
+      enabled: true
+      collector: alloy-singleton
+      jobLabel: kubernetes-events
+      # The event type is the level (Normal is already mapped to "Info");
+      # lower-cased to the values Grafana colours and filters on.
+      extraLogProcessingStages: |
+        stage.match {
+          selector = "{level=\"Info\"}"
+          stage.static_labels {
+            values = { level = "info" }
+          }
+        }
+        stage.match {
+          selector = "{level=\"Warning\"}"
+          stage.static_labels {
+            values = { level = "warn" }
+          }
+        }
+
+    # Container logs from /var/log/pods on each node.
+    podLogsViaLoki:
+      enabled: true
+      collector: alloy-logs
+      # service_name from the workload (instance/name label, then owner) as
+      # OTel's k8sattributes derived it before, not the container name.
+      alignServiceNameWithOTelSemConv: true
+      # Many formats carry no level Loki can read, so Grafana showed them as
+      # "unknown". Classified once, the same on every cluster, only where no
+      # level is set yet; first match wins, and anything unmatched is left
+      # to Loki's own detection. Tested against each format on the Alloy
+      # image, with controls (plain text and look-alikes stay unclassified).
+      extraLogProcessingStages: |
+        // klog (Kubernetes components, VPA, ...): "I1011 03:55:25.75 ..." --
+        // the first letter is the level.
+        stage.match {
+          selector = `{level=""} |~ "^I[0-9]{4} "`
+          stage.static_labels {
+            values = { level = "info" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "^W[0-9]{4} "`
+          stage.static_labels {
+            values = { level = "warn" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "^E[0-9]{4} "`
+          stage.static_labels {
+            values = { level = "error" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "^F[0-9]{4} "`
+          stage.static_labels {
+            values = { level = "fatal" }
+          }
+        }
+        // zerolog console format (Kiali, kyverno): "<time> INF msg", where
+        // kyverno wraps the time and level in terminal colour codes. [[]
+        // matches the code's literal "[" without a backslash escape.
+        stage.match {
+          selector = `{level=""} |~ "^[^ ]+ ([^ ]*[[][0-9;]*m)?INF([^ ]*[[][0-9;]*m)? "`
+          stage.static_labels {
+            values = { level = "info" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "^[^ ]+ ([^ ]*[[][0-9;]*m)?WRN([^ ]*[[][0-9;]*m)? "`
+          stage.static_labels {
+            values = { level = "warn" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "^[^ ]+ ([^ ]*[[][0-9;]*m)?ERR([^ ]*[[][0-9;]*m)? "`
+          stage.static_labels {
+            values = { level = "error" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "^[^ ]+ ([^ ]*[[][0-9;]*m)?DBG([^ ]*[[][0-9;]*m)? "`
+          stage.static_labels {
+            values = { level = "debug" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "^[^ ]+ ([^ ]*[[][0-9;]*m)?FTL([^ ]*[[][0-9;]*m)? "`
+          stage.static_labels {
+            values = { level = "fatal" }
+          }
+        }
+        // Access logs carry no level, only a status. Three shapes:
+        // Istio/Envoy JSON ("response_code":503), standard nginx
+        // ("GET / HTTP/1.1" 503), and Loki's gateway, which logs the status
+        // first ("...+0000]  503 "GET ..."). 5xx is an error, 4xx a warning,
+        // anything else info. ([]] is a literal "]", again escape-free.)
+        stage.match {
+          selector = `{level=""} |~ "\"response_code\":5[0-9]{2}|HTTP/[0-9.]+\" 5[0-9]{2} |[]] +5[0-9]{2} \""`
+          stage.static_labels {
+            values = { level = "error" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "\"response_code\":4[0-9]{2}|HTTP/[0-9.]+\" 4[0-9]{2} |[]] +4[0-9]{2} \""`
+          stage.static_labels {
+            values = { level = "warn" }
+          }
+        }
+        stage.match {
+          selector = `{level=""} |~ "\"response_code\":[0-9]|HTTP/[0-9.]+\" [0-9]{3} |[]] +[0-9]{3} \""`
+          stage.static_labels {
+            values = { level = "info" }
+          }
+        }
+
+    # The OTLP receiver (alloy-receiver above). Its Service,
+    # k8s-monitoring-alloy-receiver.alloy.svc.cluster.local:4317, is Istio's
+    # otel-tracing provider (istiod.yaml); the spokes reach it through the
+    # internal load balancer in extraObjects.
+    applicationObservability:
+      enabled: true
+      collector: alloy-receiver
+      receivers:
+        otlp:
+          grpc:
+            enabled: true
+            # gRPC's default 4MiB cap rejected a large batch from dev -- a
+            # permanent error, so it was dropped. Spokes cap their batches
+            # too; this is headroom.
+            maxReceivedMessageSize: 32MiB
+          http:
+            enabled: true
+      processors:
+        # First in line. Only this collector runs it, so an absolute size
+        # works: 75% of the 1536Mi limit, refusing new data from ~20% below.
+        memoryLimiter:
+          enabled: true
+          limit: 1152MiB
+        batch:
+          size: 2048
+          maxSize: 4096
+        # The system detector stamps this pod's own host.name on everything,
+        # spoke data included, overriding the sender's.
+        resourceDetection:
+          system:
+            enabled: false
+      # Grafana Cloud's host-info metrics, which nothing here reads.
+      connectors:
+        grafanaCloudMetrics:
+          enabled: false
+      # Leave span names as Envoy and the apps set them, as before.
+      traces:
+        setSpanNameSemanticConvention: ""
+
+    # The chart's own build-info metric, a handful of series.
+    selfReporting:
+      enabled: true
+
+    # The operator reconciles the Alloy custom resources the chart creates
+    # into the actual workloads; its CRD comes with it (alloy-crd subchart).
+    alloy-operator:
+      deploy: true
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+      # The chart's post-install hook puts a finalizer on the operator, and
+      # its pre-delete hook removes the Alloy instances before the operator
+      # goes, so deleting this app does not strand them behind the operator's
+      # own finalizer. Argo CD runs both (PostSync / PreDelete).
+      waitForAlloyRemoval:
+        enabled: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+
+    # Names differ from the otel-kube-stack originals, so both sets can exist
+    # until the cutover.
+    extraObjects:
+      # system-node-critical (alloy-logs, node-exporter) is rejected in any
+      # namespace lacking a quota whose scopeSelector matches it -- GKE only
+      # ships gcp-critical-pods in kube-system and its own namespaces (#52).
+      # pods: 1G mirrors GKE's: present, not limiting.
+      - apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: critical-pods
+          namespace: alloy
+        spec:
+          hard:
+            pods: 1G
+          scopeSelector:
+            matchExpressions:
+              - operator: In
+                scopeName: PriorityClass
+                values:
+                  - system-node-critical
+                  - system-cluster-critical
+      # The spokes' way in. Reserved in shared-network.tf: spoke collectors
+      # hardcode it, so it has to survive a hub rebuild. Until the cutover
+      # deletes the old gateway's Service, which holds the address, this one
+      # stays without an IP (GKE will not assign a reserved address twice).
+      - apiVersion: v1
+        kind: Service
+        metadata:
+          name: alloy-receiver-ilb
+          namespace: alloy
+          annotations:
+            networking.gke.io/load-balancer-type: "Internal"
+        spec:
+          type: LoadBalancer
+          loadBalancerIP: "10.30.127.200"
+          # The receiver pods' labels, as the Alloy chart sets them.
+          selector:
+            app.kubernetes.io/name: alloy-receiver
+            app.kubernetes.io/instance: k8s-monitoring-alloy-receiver
+          ports:
+            - name: otlp-grpc
+              port: 4317
+              targetPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              port: 4318
+              targetPort: 4318
+              protocol: TCP
+      # Mesh metrics, for Kiali and Grafana: every Envoy's stats endpoint
+      # (port http-envoy-prom; pods without it yield no targets).
+      - apiVersion: monitoring.coreos.com/v1
+        kind: PodMonitor
+        metadata:
+          name: alloy-envoy-stats
+          namespace: alloy
+        spec:
+          jobLabel: envoy-stats
+          namespaceSelector:
+            any: true
+          selector: {}
+          podMetricsEndpoints:
+            - port: http-envoy-prom
+              path: /stats/prometheus
+              interval: 30s
+      # istiod's own metrics. Two Services front the same istiod pods: the
+      # revision's and the `stable` tag's. Only the tag's carries
+      # istio.io/tag; selecting both would scrape istiod twice.
+      - apiVersion: monitoring.coreos.com/v1
+        kind: ServiceMonitor
+        metadata:
+          name: alloy-istiod
+          namespace: alloy
+        spec:
+          namespaceSelector:
+            matchNames: [istio-system]
+          selector:
+            matchLabels:
+              app: istiod
+            matchExpressions:
+              - key: istio.io/tag
+                operator: DoesNotExist
+          endpoints:
+            - port: http-monitoring
+              interval: 30s
+      # Kiali's chart ships a NetworkPolicy admitting only its own ports
+      # (20001, 9090), which blocks its sidecar's stats port: the envoy-stats
+      # scrape timed out for every meshed Kiali. NetworkPolicies are
+      # additive, so this opens 15090 to the collectors' namespace alone and
+      # leaves Kiali's own policy intact.
+      - apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: kiali-envoy-stats-alloy
+          namespace: istio-system
+        spec:
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kiali
+          policyTypes: [Ingress]
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: alloy
+              ports:
+                - port: 15090
+                  protocol: TCP
