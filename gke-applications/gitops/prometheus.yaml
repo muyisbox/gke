@@ -154,7 +154,9 @@ helm:
           access: proxy
           orgId: 1
           type: loki
-          url: http://loki.logging.svc.cluster.local:3100
+          # Loki runs in simple scalable mode: queries go through the
+          # gateway, which routes them to the read path.
+          url: http://loki-gateway.logging.svc.cluster.local
           version: 1
           jsonData:
             tlsSkipVerify: true

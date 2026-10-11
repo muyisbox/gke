@@ -22,47 +22,97 @@ helm:
     # with one but not the other. Argo CD never runs Helm tests anyway.
     test:
       enabled: false
-    # "SingleBinary" is the deprecated spelling of this mode.
-    deploymentMode: Monolithic
+    # Simple scalable mode: write (ingest + recent data), read (queries) and
+    # backend (compactor/retention, index gateway, ruler) run as separate,
+    # independently scaled and replicated components, with GCS as the store.
+    # Monolithic kept everything in one pod on one local disk.
+    deploymentMode: SimpleScalable
+    # Workload Identity to the loki-storage service account, which can read
+    # and write only the Loki bucket (observability-storage.tf).
+    serviceAccount:
+      name: loki
+      annotations:
+        iam.gke.io/gcp-service-account: loki-storage@cluster-dreams.iam.gserviceaccount.com
     loki:
       auth_enabled: false
-      # No retention was configured, so the 10Gi filesystem would only ever
-      # fill. The compactor deletes chunks older than retention_period; Loki
-      # 3 refuses to start with retention on unless it has somewhere to
-      # record delete requests.
-      compactor:
-        retention_enabled: true
-        delete_request_store: filesystem
-      limits_config:
-        retention_period: 168h
+      # Every stream is written to three ingesters, so a write pod or node
+      # can go away without losing unflushed logs.
       commonConfig:
-        replication_factor: 1
+        replication_factor: 3
       storage:
-        type: filesystem
+        type: gcs
+        bucketNames:
+          chunks: cluster-dreams-loki
+          ruler: cluster-dreams-loki
+          admin: cluster-dreams-loki
+      # One period, now on GCS. Logs from the monolithic era sat on its local
+      # disk and are not carried over (a few hours' worth on a hub created
+      # the same day).
       schemaConfig:
         configs:
           - from: "2024-01-01"
             store: tsdb
-            object_store: filesystem
+            object_store: gcs
             schema: v13
             index:
               prefix: loki_index_
               period: 24h
-    # loki-0 is the only memberlist peer, so the headless Service must publish
-    # it before it is Ready. Otherwise DNS returns NXDOMAIN, the ring join hits
-    # abort_if_cluster_join_fails, Loki exits, and it can never become Ready to
-    # publish the address in the first place.
+      # Retention: the compactor deletes chunks older than retention_period.
+      # Delete requests are recorded in the bucket too, so they survive the
+      # backend pods.
+      compactor:
+        retention_enabled: true
+        delete_request_store: gcs
+      limits_config:
+        retention_period: 168h
+    # The only memberlist peers are Loki's own pods; the headless Service
+    # must publish them before they are Ready or the first pod can never join
+    # a ring and become Ready to publish itself.
     memberlist:
       service:
         publishNotReadyAddresses: true
-    singleBinary:
-      replicas: 1
+    write:
+      # Fixed, not autoscaled: adding or removing ingesters reshuffles the
+      # ring. Three, to hold three copies of every stream.
+      replicas: 3
+      persistence:
+        volumeClaimsEnabled: true
+        size: 10Gi
+        storageClass: standard
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          memory: 1Gi
+    read:
+      # Stateless query path: scales with query load.
+      replicas: 2
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 4
+        targetCPUUtilizationPercentage: 70
       resources:
         requests:
           cpu: 100m
           memory: 256Mi
         limits:
           memory: 1Gi
+    backend:
+      replicas: 2
+      persistence:
+        volumeClaimsEnabled: true
+        size: 10Gi
+        storageClass: standard
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 1Gi
+    singleBinary:
+      replicas: 0
     # The rules sidecar was OOMKilled (exit 137) with no limit set.
     sidecar:
       resources:
@@ -71,15 +121,11 @@ helm:
           memory: 64Mi
         limits:
           memory: 256Mi
-    # Unused in Monolithic mode, but the chart defaults them to non-zero.
-    read:
-      replicas: 0
-    write:
-      replicas: 0
-    backend:
-      replicas: 0
+    # Two, so the push and query endpoint survives a pod or node going away.
     gateway:
-      replicas: 1
+      replicas: 2
+    # The chunks cache defaults to an 8Gi memcached, more than any node here
+    # can allocate; at this log volume GCS reads alone are fast enough.
     chunksCache:
       enabled: false
     resultsCache:
