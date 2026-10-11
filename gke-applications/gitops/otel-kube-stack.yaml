@@ -37,10 +37,9 @@ helm:
 
     collectors:
       daemon:
-        # The hub's scraping is the cluster collector's job, through
-        # kube-prometheus-stack's ServiceMonitors. The chart's default scrape
-        # file would scrape node-exporter, cAdvisor and annotated pods a
-        # second time.
+        # Kubelet per node, the same as the spokes (see below); everything
+        # else through the cluster collector. The chart's default scrape file
+        # would scrape node-exporter and annotated pods a second time.
         scrape_configs_file: ""
         presets:
           logsCollection:
@@ -84,6 +83,105 @@ helm:
               sending_queue:
                 enabled: true
                 queue_size: 5000
+          receivers:
+            # kube-prometheus-stack's kubelet ServiceMonitor authenticates
+            # with a token from a Secret, and the target allocator will not
+            # serve Secret values over plain HTTP: the collector received the
+            # literal string "<secret>" as its bearer token and every kubelet
+            # scrape failed. Scraping per node with the pod's own
+            # service-account token file avoids Secrets entirely.
+            prometheus/kubelet:
+              config:
+                scrape_configs:
+                  - job_name: kubelet
+                    metrics_path: /metrics
+                    scheme: https
+                    scrape_interval: 30s
+                    honor_labels: true
+                    authorization:
+                      type: Bearer
+                      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                    tls_config:
+                      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                      insecure_skip_verify: true
+                    kubernetes_sd_configs:
+                    - role: node
+                      selectors:
+                      - role: node
+                        field: metadata.name=${env:OTEL_K8S_NODE_NAME}
+                    relabel_configs:
+                    - action: replace
+                      target_label: job
+                      replacement: kubelet
+                    - action: replace
+                      source_labels:
+                      - __meta_kubernetes_node_name
+                      target_label: node
+                    - action: replace
+                      target_label: endpoint
+                      replacement: https-metrics
+                    - action: replace
+                      source_labels:
+                      - __metrics_path__
+                      target_label: metrics_path
+                  - job_name: kubelet-cadvisor
+                    metrics_path: /metrics/cadvisor
+                    scheme: https
+                    scrape_interval: 30s
+                    honor_labels: true
+                    honor_timestamps: true
+                    authorization:
+                      type: Bearer
+                      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                    tls_config:
+                      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                      insecure_skip_verify: true
+                    kubernetes_sd_configs:
+                    - role: node
+                      selectors:
+                      - role: node
+                        field: metadata.name=${env:OTEL_K8S_NODE_NAME}
+                    relabel_configs:
+                    - action: replace
+                      target_label: job
+                      replacement: kubelet
+                    - action: replace
+                      source_labels:
+                      - __meta_kubernetes_node_name
+                      target_label: node
+                    - action: replace
+                      target_label: endpoint
+                      replacement: https-metrics
+                    - action: replace
+                      source_labels:
+                      - __metrics_path__
+                      target_label: metrics_path
+                    metric_relabel_configs:
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_cpu_(load_average_10s|system_seconds_total|user_seconds_total)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_fs_(io_current|reads_merged_total|sector_reads_total|sector_writes_total|writes_merged_total)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_memory_(mapped_file|swap)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_(file_descriptors|tasks_state|threads_max)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_spec.*
+                    - action: drop
+                      source_labels:
+                      - id
+                      - pod
+                      regex: .+;
           processors:
             transform/cluster:
               metric_statements:
@@ -96,14 +194,12 @@ helm:
           # so it names everything itself.
           service:
             pipelines:
-              # Only OTLP that apps push to their node's collector. Setting
-              # this to null does not remove it: Helm treats null as "drop my
-              # override", the chart's default comes back, and that default
-              # scraped node-exporter, cAdvisor and annotated pods into the
-              # debug exporter for nothing. The hub's real scraping is the
-              # cluster collector's, below.
+              # Declared explicitly: setting this to null does not remove it.
+              # Helm treats null as "drop my override", the chart's default
+              # comes back, and that default scraped node-exporter, cAdvisor
+              # and annotated pods into the debug exporter for nothing.
               metrics:
-                receivers: [otlp]
+                receivers: [prometheus/kubelet, otlp]
                 processors: [transform/cluster, batch]
                 exporters: [otlphttp/prometheus-0, otlphttp/prometheus-1]
               traces:
@@ -205,8 +301,17 @@ helm:
           prometheusCR:
             enabled: true
             scrapeInterval: 30s
-            # Empty selectors select everything, in every namespace.
-            serviceMonitorSelector: {}
+            # Everything, except kube-prometheus-stack's kubelet and apiserver
+            # monitors: both authenticate with a Secret, which the target
+            # allocator redacts. The daemon scrapes the kubelet instead, and
+            # the apiserver comes from this chart's own monitor (token file).
+            # kube-prometheus-stack keeps both deployed, because its kubelet
+            # and apiserver recording rules only render while they are.
+            serviceMonitorSelector:
+              matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values: [kube-prometheus-stack-kubelet, kube-prometheus-stack-apiserver]
             podMonitorSelector: {}
         presets:
           logsCollection:
@@ -347,3 +452,8 @@ helm:
       enabled: false
     nodeExporter:
       enabled: false
+    # The apiserver monitor, authenticated by token file rather than Secret.
+    kubernetesServiceMonitors:
+      enabled: true
+    kubeApiServer:
+      enabled: true
