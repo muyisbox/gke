@@ -312,6 +312,29 @@ helm:
             - port: http-envoy-prom
               path: /stats/prometheus
               interval: 30s
+      # Kiali's chart ships a NetworkPolicy admitting only its own ports
+      # (20001, 9090), which blocks its sidecar's stats port: the scrape
+      # above timed out for every meshed Kiali. NetworkPolicies are
+      # additive, so this opens 15090 to the collectors' namespace alone and
+      # leaves Kiali's own policy intact.
+      - apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: kiali-envoy-stats
+          namespace: istio-system
+        spec:
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kiali
+          policyTypes: [Ingress]
+          ingress:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: opentelemetry
+              ports:
+                - port: 15090
+                  protocol: TCP
       - apiVersion: monitoring.coreos.com/v1
         kind: ServiceMonitor
         metadata:
