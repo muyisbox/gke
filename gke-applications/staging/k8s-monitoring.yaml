@@ -1,0 +1,255 @@
+name: k8s-monitoring
+# PILOT: Grafana Alloy, via Grafana's k8s-monitoring chart, running beside
+# otel-kube-stack (which stays the system of record) so the two can be
+# compared on the same cluster: resource cost, series and log volume, and
+# whether the hub's dashboards still work. Everything it sends is labelled
+# with its own cluster name, so nothing is double-counted. Deleting this file
+# removes the pilot.
+chart: k8s-monitoring
+repoURL: https://grafana.github.io/helm-charts
+targetRevision: "4.5.3"
+namespace: alloy
+cluster_env: staging
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
+helm:
+  values:
+    # Becomes `cluster` and k8s.cluster.name on every metric and log (the OTLP
+    # destination's clusterLabels). Deliberately not staging_cluster: the
+    # existing collectors already report as that, and every hub dashboard
+    # sums by `cluster`, so sharing the name would count staging twice.
+    cluster:
+      name: staging-alloy
+
+    global:
+      # Same cadence as otel-kube-stack, so sample counts compare 1:1.
+      scrapeInterval: 30s
+
+    # The hub gateway is the only telemetry endpoint a spoke knows; it fans
+    # out to Prometheus, Loki and Tempo on the far side.
+    destinations:
+      hub:
+        type: otlp
+        protocol: grpc
+        url: 10.30.127.200:4317
+        tls:
+          insecure: true
+        metrics:
+          enabled: true
+        logs:
+          enabled: true
+        # No trace source is enabled; see applicationObservability below.
+        traces:
+          enabled: false
+        # Same bounds as the OTel collectors. The chart's default batch has
+        # no maximum, and one oversized batch from a big scrape has already
+        # been rejected outright by the gateway's gRPC message limit and lost.
+        processors:
+          batch:
+            size: 2048
+            maxSize: 4096
+        # Absorbs a hub restart instead of dropping data (default 1000).
+        sendingQueue:
+          queueSize: 5000
+
+    # One Deployment for everything that must run once (cluster-wide scrapes,
+    # events) and one DaemonSet for what can only be read per node (pod log
+    # files). Five pods in all, operator included -- the smallest layout that
+    # covers the features below at three nodes.
+    collectors:
+      alloy-singleton:
+        presets: [singleton]
+        alloy:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+        configReloader:
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+      alloy-logs:
+        presets: [daemonset, filesystem-log-reader]
+        alloy:
+          mounts:
+            # GKE runs containerd: pod logs are under /var/log/pods, and the
+            # Docker path the preset also mounts does not exist on COS.
+            dockercontainers: false
+          resources:
+            requests:
+              cpu: 25m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+        configReloader:
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+        controller:
+          # Same reasoning as the OTel daemon collector (#52): these nodes
+          # sit at ~90-99% requested CPU, and a DaemonSet pod is pinned to its
+          # node, so without priority it stays Pending and that node's logs
+          # are simply missing from the comparison. Needs the quota below.
+          priorityClassName: system-node-critical
+          tolerations:
+            - operator: Exists
+
+    # kubelet, cAdvisor and kube-state-metrics, under the job names the
+    # hub's kube-prometheus (kubernetes-mixin) dashboards and recording rules
+    # select on -- the chart's defaults are Grafana Cloud's
+    # "integrations/kubernetes/*", which none of them match.
+    clusterMetrics:
+      enabled: true
+      collector: alloy-singleton
+      kubelet:
+        jobLabel: kubelet
+        # The mixin tells /metrics and /metrics/cadvisor apart by this label;
+        # the OTel daemon sets it the same way.
+        extraDiscoveryRules: |
+          rule {
+            target_label = "metrics_path"
+            replacement  = "/metrics"
+          }
+      cadvisor:
+        jobLabel: kubelet
+        extraDiscoveryRules: |
+          rule {
+            target_label = "metrics_path"
+            replacement  = "/metrics/cadvisor"
+          }
+      # Not scraped by otel-kube-stack either, and no hub dashboard uses it.
+      kubeletResource:
+        enabled: false
+      # apiServer and kubeDNS stay at the chart's default (off). The
+      # apiserver alone is ~60k series on staging -- over half the cluster's
+      # total -- and duplicating it adds nothing to the comparison.
+      # Reuse otel-kube-stack's kube-state-metrics rather than run a second
+      # one. Selector checked against the live Service/Pod on staging.
+      kube-state-metrics:
+        jobLabel: kube-state-metrics
+        namespace: opentelemetry
+        labelMatchers:
+          app.kubernetes.io/name: kube-state-metrics
+          release: otel-kube-stack
+        # One replica, one Service port (http/8080).
+        discoveryType: service
+      # The chart's default allow lists (kept on) cover the kubernetes-mixin
+      # compute-resource dashboards and cut series substantially; seeing how
+      # much, and what goes missing, is part of the pilot.
+
+    # node-exporter metrics. Reuses otel-kube-stack's DaemonSet: a second
+    # node-exporter would collide with it on hostNetwork port 9100.
+    hostMetrics:
+      enabled: true
+      collector: alloy-singleton
+      linuxHosts:
+        enabled: true
+        jobLabel: node-exporter
+        namespace: opentelemetry
+        labelMatchers:
+          app.kubernetes.io/name: prometheus-node-exporter
+          release: otel-kube-stack
+        metricsTuning:
+          # The minimal default list drops node_uname_info, node_load* and
+          # the disk metrics that the node-mixin dashboards and rules need;
+          # the integration list keeps them.
+          useDefaultAllowList: false
+          useIntegrationAllowList: true
+      windowsHosts:
+        enabled: false
+      energyMetrics:
+        enabled: false
+
+    # ServiceMonitor/PodMonitor discovery, limited for the pilot to the
+    # cert-manager and external-secrets ServiceMonitors (8 small targets).
+    # That proves the feature works without scraping every target a second
+    # time: the envoy-stats PodMonitor alone is ~20 sidecars, and the
+    # opentelemetry namespace holds the kube-state-metrics and node-exporter
+    # ServiceMonitors, which clusterMetrics/hostMetrics above already cover --
+    # selecting them would duplicate those series inside the pilot itself.
+    prometheusOperatorObjects:
+      enabled: true
+      collector: alloy-singleton
+      serviceMonitors:
+        enabled: true
+        namespaces: [cert-manager, external-secrets]
+      podMonitors:
+        enabled: false
+      probes:
+        enabled: false
+      scrapeConfigs:
+        enabled: false
+
+    # Kubernetes Events. Single replica, so each event is sent once.
+    clusterEvents:
+      enabled: true
+      collector: alloy-singleton
+
+    # Container logs from /var/log/pods on each node. The Loki-pipeline
+    # variant is the chart's GA path (the OTel filelog one needs Alloy's
+    # public-preview stability level); the destination converts to OTLP.
+    podLogsViaLoki:
+      enabled: true
+      collector: alloy-logs
+
+    # Off for the pilot: Istio sends spans to the OTel daemon collector, and
+    # nothing should be switched over.
+    applicationObservability:
+      enabled: false
+
+    # The chart's own build-info metric, a handful of series.
+    selfReporting:
+      enabled: true
+
+    # The operator reconciles the Alloy custom resources the chart creates
+    # into the actual DaemonSet/Deployment; its CRD comes with it (alloy-crd
+    # subchart, crds/ directory, which Argo applies). PodLogs CRD stays off.
+    alloy-operator:
+      deploy: true
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+      # The chart's post-install hook puts a finalizer on the operator, and
+      # its pre-delete hook removes the Alloy instances before the operator
+      # goes, so deleting this app does not strand them behind the operator's
+      # own finalizer. Argo CD 3.5 runs both (PostSync / PreDelete).
+      waitForAlloyRemoval:
+        enabled: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+
+    # system-node-critical above is rejected in any namespace lacking a quota
+    # whose scopeSelector matches it -- GKE only ships gcp-critical-pods in
+    # kube-system and its own managed namespaces (#52). pods: 1G mirrors
+    # GKE's: present, not limiting.
+    extraObjects:
+      - apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: critical-pods
+          namespace: alloy
+        spec:
+          hard:
+            pods: 1G
+          scopeSelector:
+            matchExpressions:
+              - operator: In
+                scopeName: PriorityClass
+                values:
+                  - system-node-critical
+                  - system-cluster-critical
