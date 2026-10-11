@@ -26,6 +26,15 @@ helm:
     deploymentMode: Monolithic
     loki:
       auth_enabled: false
+      # No retention was configured, so the 10Gi filesystem would only ever
+      # fill. The compactor deletes chunks older than retention_period; Loki
+      # 3 refuses to start with retention on unless it has somewhere to
+      # record delete requests.
+      compactor:
+        retention_enabled: true
+        delete_request_store: filesystem
+      limits_config:
+        retention_period: 168h
       commonConfig:
         replication_factor: 1
       storage:
