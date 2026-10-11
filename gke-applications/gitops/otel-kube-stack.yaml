@@ -338,6 +338,15 @@ helm:
         # LoadBalancer Service below selects on.
         suffix: gateway
         replicas: 2
+        # The queues for Prometheus, Mimir, Loki and Tempo all live in this
+        # process; 512Mi (the shared default) was too little to absorb one
+        # backend's outage. memory_limiter keeps it below the limit.
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            memory: 1536Mi
         # Nothing to scrape here; it only receives and forwards.
         presets:
           logsCollection:
@@ -428,6 +437,16 @@ helm:
                 enabled: true
                 queue_size: 5000
           processors:
+            # First in every pipeline. When a backend refuses writes, each
+            # exporter's queue keeps filling from incoming data until the
+            # process is OOM-killed -- which the gateway (twice per pod) and the
+            # cluster collector were during the Mimir ingester roll, losing
+            # everything queued. Near the limit this refuses new data with a
+            # retryable error instead, so senders hold it and retry.
+            memory_limiter:
+              check_interval: 1s
+              limit_percentage: 75
+              spike_limit_percentage: 20
             batch: {}
           service:
             pipelines:
@@ -435,7 +454,7 @@ helm:
               # cluster, so the gateway only batches and forwards.
               metrics:
                 receivers: [otlp]
-                processors: [batch]
+                processors: [memory_limiter, batch]
                 exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1, otlp_http/mimir]
               # receivers is mandatory on every pipeline. The daemon collector
               # can leave it out because its logsCollection and kubernetesEvents
@@ -445,9 +464,11 @@ helm:
               # .receivers: Required value".
               traces:
                 receivers: [otlp]
+                processors: [memory_limiter]
                 exporters: [otlp_grpc/tempo]
               logs:
                 receivers: [otlp]
+                processors: [memory_limiter]
                 exporters: [otlp_http/loki]
 
       # One per cluster: everything with a ServiceMonitor or PodMonitor --
@@ -499,7 +520,7 @@ helm:
             cpu: 200m
             memory: 512Mi
           limits:
-            memory: 1Gi
+            memory: 2Gi
         config:
           receivers:
             # The operator fills in the target allocator endpoint.
@@ -507,6 +528,16 @@ helm:
               config:
                 scrape_configs: []
           processors:
+            # First in every pipeline. When a backend refuses writes, each
+            # exporter's queue keeps filling from incoming data until the
+            # process is OOM-killed -- which the gateway (twice per pod) and the
+            # cluster collector were during the Mimir ingester roll, losing
+            # everything queued. Near the limit this refuses new data with a
+            # retryable error instead, so senders hold it and retry.
+            memory_limiter:
+              check_interval: 1s
+              limit_percentage: 75
+              spike_limit_percentage: 20
             # Every dashboard and recording rule selects by `cluster`; the
             # hub's own series need it as much as the spokes'.
             transform/cluster:
@@ -560,7 +591,7 @@ helm:
             pipelines:
               metrics:
                 receivers: [prometheus]
-                processors: [transform/cluster, batch]
+                processors: [memory_limiter, transform/cluster, batch]
                 exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1, otlp_http/mimir]
 
     # Applied to the collector CRs the chart generates.
