@@ -31,9 +31,59 @@ helm:
                 requests:
                   storage: 5Gi
     grafana:
+      # Two replicas minimum, scaling to four on load. No shared database:
+      # every dashboard and datasource is provisioned from git, so each
+      # replica builds the same state at startup, and the SQLite store is an
+      # emptyDir that never outlived a restart even with one replica.
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 4
+        targetCPU: "70"
+      # A login session lives in the database of the replica that issued it.
+      # Pinning each client to one replica keeps a session from bouncing to a
+      # replica that has never heard of it and logging the user out.
+      service:
+        sessionAffinity: ClientIP
+      podDisruptionBudget:
+        minAvailable: 1
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: grafana
+      # Ran as BestEffort: first to be starved on a node the unrequested
+      # Prometheus had already overfilled, so /api/health missed its probes.
+      # Sized to observed use (~560-700Mi). Every container needs a request
+      # or the HPA cannot compute utilisation at all.
+      resources:
+        requests:
+          cpu: 100m
+          memory: 768Mi
+        limits:
+          memory: 1536Mi
+      # The chart's 1s readiness timeout pulled a busy-but-healthy pod out of
+      # the Service on a single slow answer.
+      readinessProbe:
+        httpGet:
+          path: /api/health
+          port: grafana
+        timeoutSeconds: 5
+        periodSeconds: 10
+        failureThreshold: 3
       # The bundled dashboards gain a `cluster` selector. Without it every
       # panel silently sums dev, staging and the hub together.
       sidecar:
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
         dashboards:
           multicluster:
             global:
@@ -91,6 +141,22 @@ helm:
           matchLabels:
             scraped-by: prometheus-server
         replicas: 2
+        # Ran with no requests or limits. Each replica holds ~1M active series
+        # from three clusters and uses ~2.6Gi and half a core, but the
+        # scheduler counted it as zero and packed other pods beside it: one
+        # node showed 54% of memory requested and 92% used, and its
+        # neighbours (operator, kube-state-metrics, node-exporter, Grafana)
+        # were the ones killed. Requests sized to observed use; the limit
+        # leaves room for the WAL replay spike on restart.
+        resources:
+          requests:
+            cpu: 500m
+            memory: 3Gi
+          limits:
+            memory: 5Gi
+        # One replica per node, so a node failure cannot take both and the
+        # two 3Gi requests never land on one 8Gi machine.
+        podAntiAffinity: hard
         storageSpec:
           volumeClaimTemplate:
             spec:
@@ -118,6 +184,14 @@ helm:
           memory: 128Mi
         limits:
           memory: 256Mi
+    # Also BestEffort, and so among the first killed under node pressure.
+    prometheus-node-exporter:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
     prometheusOperator:
       enabled: true
       resources:
