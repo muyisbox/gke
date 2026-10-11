@@ -30,8 +30,8 @@ helm:
               endpoint: 0.0.0.0:4318
       retention: 168h # 7d
       # Derives request-rate, error and latency metrics from every span, and
-      # a service graph from client/server span pairs, and writes them to the
-      # hub Prometheus with exemplars: each latency bucket carries the ID of a
+      # a service graph from client/server span pairs, and writes them to
+      # Mimir with exemplars: each latency bucket carries the ID of a
       # real trace that landed in it, which is what lets a Grafana graph link
       # straight to the trace. TraceQL metrics (Traces Drilldown) need none of
       # this -- Tempo 3 serves them natively.
@@ -40,22 +40,20 @@ helm:
         processor:
           span_metrics:
             # Without these, every cluster's spans for a service collapse into
-            # one series. Labels become k8s_cluster_name / k8s_namespace_name.
-            dimensions: [k8s.cluster.name, k8s.namespace.name]
+            # one series. Labels become cluster / k8s_namespace_name: the
+            # collectors set the `cluster` resource attribute on every span,
+            # the same key metrics and logs carry.
+            dimensions: [cluster, k8s.namespace.name]
           service_graphs:
-            dimensions: [k8s.cluster.name, k8s.namespace.name]
+            # Edges carry both ends: client_cluster / server_cluster, ...
+            dimensions: [cluster, k8s.namespace.name]
         registry:
           collection_interval: 15s
         storage:
-          # Both replicas, by pod DNS name: pushed samples are not replicated
-          # between them, and through the Service each would get half.
+          # One URL through Mimir's gateway: Mimir replicates internally. The
+          # hub Prometheus is retired; writing to its pods would only fail and
+          # back up the generator's queue.
           remote_write:
-            - url: http://prometheus-prometheus-monitoring-kube-prometheus-0.prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/write
-              send_exemplars: true
-            - url: http://prometheus-prometheus-monitoring-kube-prometheus-1.prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/write
-              send_exemplars: true
-            # Dual-write to Mimir while it is evaluated beside Prometheus.
-            # One URL through its gateway: Mimir replicates internally.
             - url: http://mimir-gateway.mimir.svc.cluster.local/api/v1/push
               send_exemplars: true
       overrides:

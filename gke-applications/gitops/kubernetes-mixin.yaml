@@ -1,0 +1,114 @@
+name: kubernetes-mixin
+# The kubernetes-mixin alert/recording rules and the bundled Grafana
+# dashboards, with nothing that runs. kube-prometheus-stack is the only
+# maintained packaging of both, so it is rendered here as content alone:
+# PrometheusRules (synced into Mimir's ruler by Alloy) and dashboard
+# ConfigMaps (picked up by the standalone Grafana's sidecar). Same chart
+# version as the retiring prometheus-monitoring release, so rules and
+# dashboards do not change underneath the cutover.
+chart: kube-prometheus-stack
+repoURL: https://prometheus-community.github.io/helm-charts
+targetRevision: "91.5.0"
+namespace: monitoring
+cluster_env: gitops
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
+helm:
+  values:
+    # Object names become kubernetes-mixin-<group> rather than the chart's
+    # truncated "kubernetes-mixin-kube-prom-...", and never collide with
+    # prometheus-monitoring-kube-* while both releases exist.
+    fullnameOverride: kubernetes-mixin
+    # The CRDs come from the prometheus-operator-crds app. Two owners of one
+    # CRD would fight, and deleting this app must never take them with it.
+    crds:
+      enabled: false
+
+    # --- Nothing runs ----------------------------------------------------
+    prometheus:
+      enabled: false
+    alertmanager:
+      enabled: false
+    thanosRuler:
+      enabled: false
+    prometheusOperator:
+      enabled: false
+      admissionWebhooks:
+        enabled: false
+      # Gates only the KubeletDown alert in the rules -- the Service itself
+      # is created by a running operator, and none runs here.
+      kubeletService:
+        enabled: true
+    kubeStateMetrics:
+      enabled: false
+    nodeExporter:
+      enabled: false
+      # The node dashboards are gated on node-exporter being deployed by
+      # this chart; its metrics come from elsewhere now.
+      forceDeployDashboards: true
+    windowsMonitoring:
+      enabled: false
+    # Every component ServiceMonitor off at once. The collectors scrape these
+    # targets themselves (otel-kube-stack); a second monitor would scrape
+    # them twice.
+    kubernetesServiceMonitors:
+      enabled: false
+    # kubelet and kubeApiServer stay "enabled" with their monitors off: the
+    # chart renders the kubelet.rules, kube-apiserver-* rule groups and
+    # their dashboards only while the component is enabled, whether or not
+    # it scrapes anything. The jobs they select (kubelet, apiserver) are the
+    # names the collectors give those scrapes.
+    kubelet:
+      enabled: true
+      serviceMonitor:
+        enabled: false
+    kubeApiServer:
+      enabled: true
+      serviceMonitor:
+        enabled: false
+    # Google manages these on GKE and exposes none of them; their Down
+    # alerts would fire forever. GKE runs kube-dns, not CoreDNS.
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+    coreDns:
+      enabled: false
+    kubeDns:
+      enabled: false
+
+    # --- Rules -----------------------------------------------------------
+    defaultRules:
+      create: true
+      rules:
+        # These watch the Prometheus, operator and Alertmanager this chart
+        # used to run, by job names derived from this release
+        # (kubernetes-mixin-prometheus, ...). Nothing carries them, so they
+        # would only be noise; Mimir is monitored by its own mixin.
+        alertmanager: false
+        prometheus: false
+        prometheusOperator: false
+        configReloaders: false
+        windows: false
+
+    # --- Dashboards ------------------------------------------------------
+    grafana:
+      enabled: false
+      # Grafana runs as its own app (grafana.yaml); this renders only the
+      # dashboard ConfigMaps its sidecar loads.
+      forceDeployDashboards: true
+      # The datasource ConfigMap is Grafana's own, provisioned there.
+      forceDeployDatasources: false
+      sidecar:
+        dashboards:
+          label: grafana_dashboard
+          labelValue: "1"
+          # The bundled dashboards gain a `cluster` selector. Without it every
+          # panel silently sums dev, staging and the hub together.
+          multicluster:
+            global:
+              enabled: true

@@ -1,0 +1,262 @@
+name: grafana
+# Grafana on its own, no longer inside kube-prometheus-stack, which is being
+# retired with the hub Prometheus. Same chart and version the stack bundled
+# (91.5.0 -> grafana 13.2.5); the chart moved to the community repo, the
+# same one Tempo and Loki come from. Mimir is now the default datasource.
+#
+# Release "grafana" names every object grafana-*, so this runs beside the
+# old prometheus-monitoring-grafana until that app is deleted.
+chart: grafana
+repoURL: https://grafana-community.github.io/helm-charts
+targetRevision: "13.2.5"
+namespace: monitoring
+cluster_env: gitops
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
+helm:
+  values:
+    # Two replicas minimum, scaling to four on load. No shared database:
+    # every dashboard and datasource is provisioned from git, so each
+    # replica builds the same state at startup, and the SQLite store is an
+    # emptyDir that never outlived a restart even with one replica.
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPU: "70"
+    # A login session lives in the database of the replica that issued it.
+    # Pinning each client to one replica keeps a session from bouncing to a
+    # replica that has never heard of it and logging the user out.
+    service:
+      sessionAffinity: ClientIP
+    podDisruptionBudget:
+      minAvailable: 1
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: grafana
+                  app.kubernetes.io/instance: grafana
+    # Ran as BestEffort: first to be starved on a node the unrequested
+    # Prometheus had already overfilled, so /api/health missed its probes.
+    # Sized to observed use (~560-700Mi). Every container needs a request
+    # or the HPA cannot compute utilisation at all.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 768Mi
+      limits:
+        memory: 1536Mi
+    # The chart's 1s readiness timeout pulled a busy-but-healthy pod out of
+    # the Service on a single slow answer.
+    readinessProbe:
+      httpGet:
+        path: /api/health
+        port: grafana
+      timeoutSeconds: 5
+      periodSeconds: 10
+      failureThreshold: 3
+
+    # The chart's own default is a random password looked up from the live
+    # Secret -- which Argo cannot do, so every render would mint a new one
+    # and the app would never settle. Generated once in-cluster by External
+    # Secrets instead (refreshPolicy CreatedOnce): stable, and never in git.
+    # Read it with: kubectl -n monitoring get secret grafana-admin
+    #   -o jsonpath='{.data.password}' | base64 -d
+    admin:
+      existingSecret: grafana-admin
+      userKey: admin-user
+      # The generator's own key name.
+      passwordKey: password
+    extraObjects:
+      - apiVersion: generators.external-secrets.io/v1alpha1
+        kind: Password
+        metadata:
+          name: grafana-admin-password
+        spec:
+          length: 32
+          digits: 6
+          symbols: 0
+          noUpper: false
+          allowRepeat: true
+      - apiVersion: external-secrets.io/v1
+        kind: ExternalSecret
+        metadata:
+          name: grafana-admin
+        spec:
+          refreshPolicy: CreatedOnce
+          target:
+            name: grafana-admin
+            # Adds the fixed user name beside the generated `password` key.
+            # Merge rather than a templated password: no template braces to
+            # survive the ApplicationSet and the chart's tpl on the way here.
+            template:
+              mergePolicy: Merge
+              data:
+                admin-user: admin
+          dataFrom:
+            - sourceRef:
+                generatorRef:
+                  apiVersion: generators.external-secrets.io/v1alpha1
+                  kind: Password
+                  name: grafana-admin-password
+
+    serviceMonitor:
+      enabled: true
+
+    sidecar:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+      # The chart only sets HEALTH_PORT on the optional init container, but
+      # the k8s-sidecar image starts a health server in every container on a
+      # default port -- so the dashboards and datasources sidecars, sharing
+      # one pod network, collided ("OSError: Address in use", a traceback on
+      # every start). The chart's own intended ports, set explicitly.
+      dashboards:
+        enabled: true
+        env:
+          HEALTH_PORT: "8084"
+        # Every app's dashboards, wherever they live. The bundled Kubernetes
+        # ones come from the kubernetes-mixin app.
+        label: grafana_dashboard
+        labelValue: "1"
+        searchNamespace: ALL
+        provider:
+          allowUiUpdates: false
+      datasources:
+        enabled: true
+        env:
+          HEALTH_PORT: "8082"
+        # Not "1": the retiring stack's datasource ConfigMap carries that,
+        # with uid prometheus pointing at Prometheus and a second default.
+        # Loading it here would fail provisioning outright (two defaults).
+        label: grafana_datasource
+        labelValue: grafana
+
+    # Provisioned from this file, not by the sidecar. Fixed UIDs: dashboards,
+    # links and the cross-links below name their targets by UID, and without
+    # one each Grafana replica generated its own at random. `$$` is
+    # Grafana's escape for a literal `$` in provisioning files.
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          # uid "prometheus" kept from the Prometheus datasource this
+          # replaces, so every dashboard, saved link and cross-link that
+          # names it now reads from Mimir unchanged.
+          - name: Mimir
+            uid: prometheus
+            type: prometheus
+            access: proxy
+            orgId: 1
+            # Mimir's Prometheus API, through its gateway.
+            url: http://mimir-gateway.mimir.svc.cluster.local/prometheus
+            isDefault: true
+            version: 1
+            jsonData:
+              prometheusType: Mimir
+              httpMethod: POST
+              # The collectors' scrape interval.
+              timeInterval: 30s
+              alertmanagerUid: alertmanager
+              # Exemplars link to Tempo. Tempo's generator names the label
+              # traceID; OTLP-instrumented apps send trace_id.
+              exemplarTraceIdDestinations:
+                - name: traceID
+                  datasourceUid: tempo
+                - name: trace_id
+                  datasourceUid: tempo
+          # Mimir's Alertmanager: what fired, silences, the routing config.
+          # uid kept from the Alertmanager datasource this replaces.
+          - name: Mimir Alertmanager
+            uid: alertmanager
+            type: alertmanager
+            access: proxy
+            orgId: 1
+            url: http://mimir-gateway.mimir.svc.cluster.local
+            version: 1
+            jsonData:
+              implementation: mimir
+              handleGrafanaManagedAlerts: false
+          - name: Tempo
+            uid: tempo
+            type: tempo
+            access: proxy
+            orgId: 1
+            url: http://tempo.tracing.svc.cluster.local:3200
+            version: 1
+            jsonData:
+              # Span -> its pod's logs, around the span's time window. Spans
+              # carry the real pod, namespace and cluster (set by the
+              # collector from the sending pod), which Loki indexes as labels
+              # -- `cluster` under the same name on both sides.
+              tracesToLogsV2:
+                datasourceUid: loki
+                spanStartTimeShift: "-5m"
+                spanEndTimeShift: "5m"
+                tags:
+                  - key: cluster
+                    value: cluster
+                  - key: k8s.namespace.name
+                    value: k8s_namespace_name
+                  - key: k8s.pod.name
+                    value: k8s_pod_name
+              # Span -> its service's request rate and latency, from the span
+              # metrics Tempo's generator writes to Mimir.
+              tracesToMetrics:
+                datasourceUid: prometheus
+                spanStartTimeShift: "-5m"
+                spanEndTimeShift: "5m"
+                # cluster too, now that span metrics carry it: otherwise a
+                # dev span's rate would sum every cluster's.
+                tags:
+                  - key: service.name
+                    value: service
+                  - key: cluster
+                    value: cluster
+                queries:
+                  - name: Request rate
+                    query: sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))
+                  - name: p95 latency
+                    query: histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{$$__tags}[5m])))
+              # Service graph from the generator's service_graphs metrics.
+              serviceMap:
+                datasourceUid: prometheus
+              nodeGraph:
+                enabled: true
+              lokiSearch:
+                datasourceUid: loki
+          - name: Loki
+            uid: loki
+            type: loki
+            access: proxy
+            orgId: 1
+            # Loki runs in simple scalable mode: queries go through the
+            # gateway, which routes them to the read path.
+            url: http://loki-gateway.logging.svc.cluster.local
+            version: 1
+            jsonData:
+              tlsSkipVerify: true
+              # Log line -> trace. The first matches the trace_id field in
+              # Istio's JSON access logs; the second, the trace_id that
+              # OTel-instrumented apps attach to their own log records.
+              derivedFields:
+                - name: TraceID
+                  matcherRegex: '"trace_id":"([0-9a-f]{32})"'
+                  url: "$${__value.raw}"
+                  datasourceUid: tempo
+                  urlDisplayLabel: View trace
+                - name: trace_id
+                  matcherType: label
+                  matcherRegex: trace_id
+                  url: "$${__value.raw}"
+                  datasourceUid: tempo
+                  urlDisplayLabel: View trace
