@@ -79,6 +79,14 @@ helm:
       # panel silently sums dev, staging and the hub together.
       sidecar:
         datasources:
+          # The chart (grafana 13.2.5) only sets HEALTH_PORT on the optional
+          # init container, but the k8s-sidecar image starts a health server
+          # in every container on a default port -- so the dashboards and
+          # datasources sidecars, sharing one pod network, collided ("OSError:
+          # Address in use", a traceback on every start). The chart's own
+          # intended ports, set explicitly.
+          env:
+            HEALTH_PORT: "8082"
           # Exemplars on the default Prometheus datasource link to Tempo.
           exemplarTraceIdDestinations:
             datasourceUid: tempo
@@ -90,6 +98,8 @@ helm:
           limits:
             memory: 128Mi
         dashboards:
+          env:
+            HEALTH_PORT: "8084"
           multicluster:
             global:
               enabled: true

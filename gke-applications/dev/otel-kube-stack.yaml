@@ -242,7 +242,12 @@ helm:
                 - context: datapoint
                   statements:
                     - set(attributes["cluster"], "dev_cluster")
-            batch: {}
+            # Bounded, so no export is anywhere near the hub gateway's gRPC
+            # message limit: one oversized batch from a big scrape was
+            # rejected outright and lost.
+            batch:
+              send_batch_size: 2048
+              send_batch_max_size: 4096
           exporters:
             # The hub's gateway is the only telemetry endpoint a spoke knows;
             # it fans out to Prometheus, Loki and Tempo on the far side.
@@ -328,7 +333,12 @@ helm:
                 - context: datapoint
                   statements:
                     - set(attributes["cluster"], "dev_cluster")
-            batch: {}
+            # Bounded, so no export is anywhere near the hub gateway's gRPC
+            # message limit: one oversized batch from a big scrape was
+            # rejected outright and lost.
+            batch:
+              send_batch_size: 2048
+              send_batch_max_size: 4096
           exporters:
             otlp_grpc/hub:
               endpoint: 10.30.127.200:4317
