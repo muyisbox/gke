@@ -1,0 +1,259 @@
+name: mimir
+# Long-term metrics store for the hub, on GCS. Runs ALONGSIDE Prometheus for
+# now: every collector and Tempo's metrics generator write to both, and
+# Grafana has Mimir as a second, non-default datasource, so the two can be
+# compared on the same data before anything is cut over. Prometheus is
+# unchanged.
+chart: mimir-distributed
+repoURL: https://grafana.github.io/helm-charts
+targetRevision: "6.2.1" # Mimir 3.2.1
+namespace: mimir
+cluster_env: gitops
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
+helm:
+  values:
+    # Workload Identity to mimir-storage, which can read and write only the
+    # Mimir bucket (observability-storage.tf). No key file anywhere.
+    serviceAccount:
+      create: true
+      name: mimir
+      annotations:
+        iam.gke.io/gcp-service-account: mimir-storage@cluster-dreams.iam.gserviceaccount.com
+
+    # Classic architecture: distributors push straight to ingesters. Chart
+    # 6.x defaults to ingest storage, which puts a Kafka cluster in the write
+    # path -- another stateful system to run and size, for a load (~15k
+    # samples/s) three ingesters take directly. The ingest_storage, distributor
+    # and push_grpc_method_enabled entries below undo the chart's Kafka-only
+    # settings, as its own classic-architecture.yaml does.
+    kafka:
+      enabled: false
+    # GCS, not the bundled MinIO.
+    minio:
+      enabled: false
+    # Only needed for zone-aware replication, which is off: RF 3 over three
+    # ingester pods already survives losing one.
+    rollout_operator:
+      enabled: false
+
+    mimir:
+      structuredConfig:
+        # One tenant. Nothing here needs isolation between writers, and with
+        # this off no client has to send X-Scope-OrgID.
+        multitenancy_enabled: false
+        ingest_storage:
+          enabled: false
+          kafka:
+            address: null
+            topic: null
+            auto_create_topic_default_partitions: null
+        distributor:
+          remote_timeout: null
+        ingester:
+          push_grpc_method_enabled: null
+          ring:
+            # Every series on all three ingesters: one can restart or move
+            # without a gap in recent data or a failed write.
+            replication_factor: 3
+
+        # One bucket, three prefixes. Mimir refuses to start if blocks share
+        # a prefix with ruler or Alertmanager state. Set per store rather than
+        # under `common`: the chart's base config hard-codes
+        # blocks_storage.backend: s3, which would win over a common default.
+        blocks_storage:
+          backend: gcs
+          gcs:
+            bucket_name: cluster-dreams-mimir
+          storage_prefix: blocks
+        ruler_storage:
+          backend: gcs
+          gcs:
+            bucket_name: cluster-dreams-mimir
+          storage_prefix: ruler
+        alertmanager_storage:
+          backend: gcs
+          gcs:
+            bucket_name: cluster-dreams-mimir
+          storage_prefix: alertmanager
+
+        limits:
+          # The defaults (10k samples/s, 150k series, 30 labels, no exemplars,
+          # no out-of-order window) would reject most of what the hub
+          # Prometheus accepts today: ~15.4k samples/s, ~1M active series.
+          # Headroom covers growth and the backlog collectors flush after an
+          # outage (their queues hold up to 15m).
+          ingestion_rate: 150000
+          ingestion_burst_size: 1500000
+          max_global_series_per_user: 3000000
+          # Istio's request metrics carry 33 labels; at the default of 30
+          # every one of them would be refused.
+          max_label_names_per_series: 50
+          # Same as Prometheus's exemplar storage (max_exemplars 100000):
+          # keeps the trace IDs Tempo attaches to latency buckets.
+          max_global_exemplars_per_user: 100000
+          # Matches Prometheus: collector retries and two gateway replicas
+          # interleaving deliver some samples late.
+          out_of_order_time_window: 30m
+          # The compactor owns retention -- the bucket has no age rule.
+          # Longer than Prometheus's 10d, which is the point of Mimir.
+          compactor_blocks_retention_period: 30d
+          # OTLP name translation identical to the hub Prometheus (3.14,
+          # defaults): metric names escaped to [a-zA-Z0-9_:] with unit and
+          # type suffixes (_seconds, _bytes, _total, ...), resource attributes
+          # only in target_info / job / instance, label-name underscore
+          # handling as Prometheus does it. Mimir's own default is NO suffixes,
+          # which would name every OTLP metric differently from Prometheus
+          # and break every dashboard query against it. Mimir rejects the
+          # strategy unless suffixes are also switched on explicitly.
+          otel_metric_suffixes_enabled: true
+          otel_translation_strategy: UnderscoreEscapingWithSuffixes
+          otel_label_name_underscore_sanitization: true
+          otel_label_name_preserve_multiple_underscores: true
+          otel_keep_identifying_resource_attributes: false
+          otel_promote_scope_metadata: false
+          otel_convert_histograms_to_nhcb: false
+
+    # --- Write path -------------------------------------------------------
+    distributor:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          memory: 2Gi
+    ingester:
+      replicas: 3
+      # Single zone; zone-awareness would also need the rollout operator.
+      zoneAwareReplication:
+        enabled: false
+      # Each ingester holds every series (RF 3 over three pods). The hub
+      # Prometheus holds the same head in ~1.6Gi and ~0.3 CPU at 0.6M series,
+      # so this requests about that; the limit leaves room to grow past 1M.
+      resources:
+        requests:
+          cpu: 300m
+          memory: 2Gi
+        limits:
+          memory: 6Gi
+      # WAL plus the last ~13h of blocks, kept after upload so recent queries
+      # are served locally.
+      persistentVolume:
+        size: 20Gi
+
+    # --- Read path --------------------------------------------------------
+    querier:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 2Gi
+    query_frontend:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          memory: 1Gi
+    query_scheduler:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+    store_gateway:
+      replicas: 2
+      zoneAwareReplication:
+        enabled: false
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 2Gi
+      persistentVolume:
+        size: 10Gi
+
+    # --- Background -------------------------------------------------------
+    compactor:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          memory: 2Gi
+      # Downloads a day's blocks to compact them.
+      persistentVolume:
+        size: 20Gi
+    # Ruler and Alertmanager run but hold nothing yet: alerting stays on
+    # Prometheus until the PrometheusRules are migrated separately.
+    ruler:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 1Gi
+    alertmanager:
+      replicas: 1
+      zoneAwareReplication:
+        enabled: false
+      resources:
+        requests:
+          cpu: 20m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+    overrides_exporter:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 128Mi
+
+    # The one endpoint for writes (/api/v1/push, /otlp/v1/metrics) and
+    # queries (/prometheus), routing each to the right component. Two, so
+    # neither path goes down with one pod or node.
+    gateway:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+
+    # Caches off. The chart's defaults are memcached sized for large
+    # installs (8Gi for chunks alone), more than a hub node can spare. At
+    # this scale queries are mostly over the last 12h, which the ingesters
+    # answer from memory; older ranges read blocks from GCS directly, which
+    # is slower but fine for comparison traffic. Small caches can be added
+    # if store-gateway latency shows up.
+    chunks-cache:
+      enabled: false
+    index-cache:
+      enabled: false
+    metadata-cache:
+      enabled: false
+    results-cache:
+      enabled: false
+
+    # Scraped by the collectors' target allocator, like every other app.
+    # clusterLabel null: the collector already sets `cluster` on every
+    # series; the chart's default would overwrite it with "mimir".
+    metaMonitoring:
+      serviceMonitor:
+        enabled: true
+        clusterLabel: null
+        labels:
+          release: prometheus-monitoring

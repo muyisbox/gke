@@ -54,6 +54,10 @@ helm:
               send_exemplars: true
             - url: http://prometheus-prometheus-monitoring-kube-prometheus-1.prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/write
               send_exemplars: true
+            # Dual-write to Mimir while it is evaluated beside Prometheus.
+            # One URL through its gateway: Mimir replicates internally.
+            - url: http://mimir-gateway.mimir.svc.cluster.local/api/v1/push
+              send_exemplars: true
       overrides:
         defaults:
           metrics_generator:
