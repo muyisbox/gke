@@ -330,6 +330,11 @@ helm:
               protocols:
                 grpc:
                   endpoint: 0.0.0.0:4317
+                  # gRPC's default 4MiB message cap rejected a large batch from
+                  # dev ("received message after decompression larger than
+                  # max") -- a permanent error, so the batch was dropped, not
+                  # retried. Spokes now cap batch size too; this is headroom.
+                  max_recv_msg_size_mib: 32
                 http:
                   endpoint: 0.0.0.0:4318
           exporters:
