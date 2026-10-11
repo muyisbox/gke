@@ -19,6 +19,18 @@ helm:
     # attribute that says where anything came from.
     clusterName: dev
 
+    # The target allocator resolves each ServiceMonitor's TLS and auth
+    # references itself. kube-prometheus-stack's kubelet and apiserver
+    # monitors take their CA from the kube-root-ca.crt ConfigMap, and the
+    # chart's role can read Secrets but not ConfigMaps, so both were skipped
+    # ("unable to get configmap kube-root-ca.crt") and the hub had no kubelet,
+    # cAdvisor or apiserver metrics. Appended to the chart's default rules.
+    clusterRole:
+      rules:
+        - apiGroups: [""]
+          resources: [configmaps]
+          verbs: [get, list, watch]
+
     collectors:
       # One per node: logs, traces, Kubernetes events, and the kubelet --
       # which can only be scraped per node.
