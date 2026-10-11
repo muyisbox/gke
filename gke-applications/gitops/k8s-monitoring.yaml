@@ -369,6 +369,27 @@ helm:
         jobLabel: kube-dns
       kube-state-metrics:
         jobLabel: kube-state-metrics
+        # ksm's *webhook_clientconfig_service series carry service_name and
+        # service_namespace labels. The chart's OTLP destination promotes
+        # those, per datapoint, onto the resource that every series from the
+        # same scrape shares, and Mimir derives job from service.namespace/
+        # service.name -- so all ksm series landed under jobs such as
+        # "gmp-system/gmp-operator" and the mixin's job="kube-state-metrics"
+        # selectors (requests, limits, allocatable) found nothing. Renamed
+        # here, before they reach the destination.
+        extraMetricProcessingRules: |
+          rule {
+            source_labels = ["service_name"]
+            target_label  = "webhook_service_name"
+          }
+          rule {
+            source_labels = ["service_namespace"]
+            target_label  = "webhook_service_namespace"
+          }
+          rule {
+            regex  = "service_name|service_namespace"
+            action = "labeldrop"
+          }
         metricsTuning:
           useDefaultAllowList: false
 
