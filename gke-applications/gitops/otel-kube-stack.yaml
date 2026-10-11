@@ -75,6 +75,14 @@ helm:
             # Loki 3.x ingests OTLP natively, so no Loki-specific exporter.
             otlp_http/loki:
               endpoint: http://loki-gateway.logging.svc.cluster.local/otlp
+              # Covers a Loki rollout or restart (the write ring re-forming), so
+              # logs queue instead of being dropped after the default 5m.
+              retry_on_failure:
+                enabled: true
+                max_elapsed_time: 15m
+              sending_queue:
+                enabled: true
+                queue_size: 5000
             otlp_http/prometheus-0:
               endpoint: http://prometheus-prometheus-monitoring-kube-prometheus-0.prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/otlp
               # A Prometheus replica restart, WAL replay included, outlasts the
@@ -344,6 +352,14 @@ helm:
                 insecure: true
             otlp_http/loki:
               endpoint: http://loki-gateway.logging.svc.cluster.local/otlp
+              # Covers a Loki rollout or restart (the write ring re-forming), so
+              # logs queue instead of being dropped after the default 5m.
+              retry_on_failure:
+                enabled: true
+                max_elapsed_time: 15m
+              sending_queue:
+                enabled: true
+                queue_size: 5000
             # The hub Prometheus runs two replicas, and pushed data is not
             # replicated between them. Sending through the Service would
             # load-balance each batch to one replica, leaving both with half
