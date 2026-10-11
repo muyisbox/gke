@@ -7,6 +7,8 @@ repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
 targetRevision: "0.24.3"
 namespace: opentelemetry
 cluster_env: dev
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
 helm:
   values:
     # The prometheus-operator CRDs come from the prometheus-operator-crds app.
@@ -293,6 +295,43 @@ helm:
     # kube-system and its own managed namespaces. Same thing that bit Alloy in
     # #52. pods: 1G mirrors GKE's: present, not limiting.
     extraObjects:
+      # Mesh metrics, for Kiali and Grafana: every Envoy's stats endpoint
+      # (port http-envoy-prom; pods without it yield no targets), and
+      # istiod's own. Picked up by the cluster collector's target allocator.
+      - apiVersion: monitoring.coreos.com/v1
+        kind: PodMonitor
+        metadata:
+          name: envoy-stats
+          namespace: opentelemetry
+        spec:
+          jobLabel: envoy-stats
+          namespaceSelector:
+            any: true
+          selector: {}
+          podMetricsEndpoints:
+            - port: http-envoy-prom
+              path: /stats/prometheus
+              interval: 30s
+      - apiVersion: monitoring.coreos.com/v1
+        kind: ServiceMonitor
+        metadata:
+          name: istiod
+          namespace: opentelemetry
+        spec:
+          namespaceSelector:
+            matchNames: [istio-system]
+          # Two Services front the same istiod pods: the revision's and the
+          # `stable` tag's. Only the tag's carries istio.io/tag; selecting
+          # both would scrape istiod twice.
+          selector:
+            matchLabels:
+              app: istiod
+            matchExpressions:
+              - key: istio.io/tag
+                operator: DoesNotExist
+          endpoints:
+            - port: http-monitoring
+              interval: 30s
       - apiVersion: v1
         kind: ResourceQuota
         metadata:

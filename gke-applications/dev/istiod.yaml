@@ -14,9 +14,41 @@ ignoreDifferences:
 helm:
   values:
     pilot:
+      env:
+        # The sidecar runs as a Kubernetes native sidecar (an init container
+        # with restartPolicy: Always) and so exits with the pod. As an
+        # ordinary container it outlives the job it sits beside, and every
+        # Job -- Helm hooks included -- would never complete.
+        ENABLE_NATIVE_SIDECARS: "true"
+      # Percent of requests traced. Enough to see every route in a demo
+      # mesh without tracing every request.
+      traceSampling: 10.0
       autoscaleEnabled: true
       autoscaleMin: 2
       autoscaleMax: 4
     revision: "1-30"
     revisionTags:
       - stable
+    global:
+      proxy:
+        # Istio's default is 100m per sidecar. Across every pod on three small
+        # clusters that is several cores reserved by proxies that idle at a
+        # few millicores here.
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+    meshConfig:
+      enableTracing: true
+      defaultProviders:
+        metrics: [prometheus]
+        tracing: [otel-tracing]
+      extensionProviders:
+        # Each sidecar sends spans to the OTel collector on this cluster,
+        # which forwards them to Tempo on the hub with everything else.
+        - name: otel-tracing
+          opentelemetry:
+            service: otel-kube-stack-daemon-collector.opentelemetry.svc.cluster.local
+            port: 4317
