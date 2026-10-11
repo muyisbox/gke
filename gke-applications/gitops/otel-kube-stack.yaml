@@ -112,6 +112,19 @@ helm:
               sending_queue:
                 enabled: true
                 queue_size: 5000
+            # Dual-write while Mimir is evaluated beside Prometheus. Mimir
+            # replicates internally, so one exporter through its gateway is
+            # enough. Same 15m retry and queue: an ingester rollout must not
+            # drop batches, and a stalled Mimir only backs up this queue --
+            # each exporter has its own, so Prometheus is not held up.
+            otlp_http/mimir:
+              endpoint: http://mimir-gateway.mimir.svc.cluster.local/otlp
+              retry_on_failure:
+                enabled: true
+                max_elapsed_time: 15m
+              sending_queue:
+                enabled: true
+                queue_size: 5000
           receivers:
             # kube-prometheus-stack's kubelet ServiceMonitor authenticates
             # with a token from a Secret, and the target allocator will not
@@ -304,7 +317,7 @@ helm:
               metrics:
                 receivers: [prometheus/kubelet, otlp]
                 processors: [transform/cluster, batch]
-                exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1]
+                exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1, otlp_http/mimir]
               traces:
                 exporters: [otlp_grpc/tempo]
               # Declaring processors replaces the chart's preset list rather
@@ -401,6 +414,19 @@ helm:
               sending_queue:
                 enabled: true
                 queue_size: 5000
+            # Dual-write while Mimir is evaluated beside Prometheus. Mimir
+            # replicates internally, so one exporter through its gateway is
+            # enough. Same 15m retry and queue: an ingester rollout must not
+            # drop batches, and a stalled Mimir only backs up this queue --
+            # each exporter has its own, so Prometheus is not held up.
+            otlp_http/mimir:
+              endpoint: http://mimir-gateway.mimir.svc.cluster.local/otlp
+              retry_on_failure:
+                enabled: true
+                max_elapsed_time: 15m
+              sending_queue:
+                enabled: true
+                queue_size: 5000
           processors:
             batch: {}
           service:
@@ -410,7 +436,7 @@ helm:
               metrics:
                 receivers: [otlp]
                 processors: [batch]
-                exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1]
+                exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1, otlp_http/mimir]
               # receivers is mandatory on every pipeline. The daemon collector
               # can leave it out because its logsCollection and kubernetesEvents
               # presets inject receivers for it; the gateway runs with every
@@ -517,12 +543,25 @@ helm:
               sending_queue:
                 enabled: true
                 queue_size: 5000
+            # Dual-write while Mimir is evaluated beside Prometheus. Mimir
+            # replicates internally, so one exporter through its gateway is
+            # enough. Same 15m retry and queue: an ingester rollout must not
+            # drop batches, and a stalled Mimir only backs up this queue --
+            # each exporter has its own, so Prometheus is not held up.
+            otlp_http/mimir:
+              endpoint: http://mimir-gateway.mimir.svc.cluster.local/otlp
+              retry_on_failure:
+                enabled: true
+                max_elapsed_time: 15m
+              sending_queue:
+                enabled: true
+                queue_size: 5000
           service:
             pipelines:
               metrics:
                 receivers: [prometheus]
                 processors: [transform/cluster, batch]
-                exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1]
+                exporters: [otlp_http/prometheus-0, otlp_http/prometheus-1, otlp_http/mimir]
 
     # Applied to the collector CRs the chart generates.
     defaultCRConfig:

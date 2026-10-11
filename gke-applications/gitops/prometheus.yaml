@@ -175,6 +175,22 @@ helm:
                 url: "$${__value.raw}"
                 datasourceUid: tempo
                 urlDisplayLabel: View trace
+        # Same metrics, written to both stores while Mimir is evaluated, so a
+        # panel can be switched between them and compared. Not the default:
+        # dashboards and alerts stay on Prometheus until the cutover.
+        - name: Mimir
+          uid: mimir
+          access: proxy
+          orgId: 1
+          type: prometheus
+          # Mimir's Prometheus API, through its gateway.
+          url: http://mimir-gateway.mimir.svc.cluster.local/prometheus
+          version: 1
+          isDefault: false
+          jsonData:
+            exemplarTraceIdDestinations:
+              - name: traceID
+                datasourceUid: tempo
     prometheus:
       # Reserved in shared-network.tf. Nothing writes here any more -- metrics
       # arrive over OTLP through the gateway -- but each spoke's Kiali queries
