@@ -133,15 +133,25 @@ helm:
       # Single zone; zone-awareness would also need the rollout operator.
       zoneAwareReplication:
         enabled: false
-      # Each ingester holds every series (RF 3 over three pods). The hub
-      # Prometheus holds the same head in ~1.6Gi and ~0.3 CPU at 0.6M series,
-      # so this requests about that; the limit leaves room to grow past 1M.
+      # Measured: ~1.7-2.0Gi each at ~495k in-memory series within minutes of
+      # starting, before the 2h head had filled -- already at the old 2Gi
+      # request. Requesting less than real use is what let the hub's
+      # Prometheus starve its neighbours; 3Gi covers a full head, the limit
+      # leaves room for growth and WAL replay.
       resources:
         requests:
           cpu: 300m
-          memory: 2Gi
+          memory: 3Gi
         limits:
           memory: 6Gi
+      # One ingester per node, strictly. Every series is written to three
+      # ingesters and a write needs two, so two on one node -- as the chart's
+      # soft default (ScheduleAnyway) produced -- meant losing that node
+      # stopped all metric writes.
+      topologySpreadConstraints:
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
       # WAL plus the last ~13h of blocks, kept after upload so recent queries
       # are served locally.
       persistentVolume:
