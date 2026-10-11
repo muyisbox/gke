@@ -10,6 +10,13 @@ cluster_env: gitops
 istioInjection: disabled
 helm:
   values:
+    lokiCanary:
+      # The canary pushes its test lines straight to Loki, labelled by
+      # <labelname>=<pod name>. With the chart's `pod`, Loki's OTLP-era
+      # service_name grouping had nothing to go on and filed the canary --
+      # most of the log volume -- under unknown_service. Its read-back
+      # queries use the same label, so it keeps working.
+      labelname: service_name
     # "SingleBinary" is the deprecated spelling of this mode.
     deploymentMode: Monolithic
     loki:

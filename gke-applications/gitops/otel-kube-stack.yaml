@@ -185,6 +185,27 @@ helm:
                       - pod
                       regex: .+;
           processors:
+            # Kubernetes Events come from the k8s_objects receiver, not a
+            # pod's log file, so nothing gives them a service name (Loki files
+            # them under unknown_service), and the resource-detection step
+            # stamps the *collector's* own pod, node and host onto them, as if
+            # the collector had written them. Name them, and drop the identity
+            # that belongs to the collector rather than the event.
+            transform/events:
+              log_statements:
+                - context: log
+                  conditions:
+                    - attributes["k8s.resource.name"] == "events"
+                    - resource.attributes["k8s.resource.name"] == "events"
+                  statements:
+                    - set(resource.attributes["service.name"], "kubernetes-events")
+                    - delete_key(resource.attributes, "k8s.pod.name")
+                    - delete_key(resource.attributes, "k8s.pod.ip")
+                    - delete_key(resource.attributes, "k8s.pod.uid")
+                    - delete_key(resource.attributes, "k8s.node.name")
+                    - delete_key(resource.attributes, "k8s.node.ip")
+                    - delete_key(resource.attributes, "k8s.node.uid")
+                    - delete_key(resource.attributes, "host.name")
             transform/cluster:
               metric_statements:
                 - context: datapoint
@@ -206,7 +227,12 @@ helm:
                 exporters: [otlphttp/prometheus-0, otlphttp/prometheus-1]
               traces:
                 exporters: [otlp/tempo]
+              # Declaring processors replaces the chart's preset list rather
+              # than adding to it, so the whole chain is spelled out --
+              # dropping resource_detection/env would strip k8s.cluster.name
+              # from every log. transform/events must run after it.
               logs:
+                processors: [k8s_attributes, resource_detection/env, resource/hostname, transform/events, batch]
                 exporters: [otlphttp/loki]
 
       # Hub-only second collector. Spokes cannot reach Tempo or Loki directly,
@@ -374,6 +400,15 @@ helm:
 
     # Applied to the collector CRs the chart generates.
     defaultCRConfig:
+      config:
+        service:
+          telemetry:
+            logs:
+              # Each error was followed by a multi-line Go stack trace, and
+              # the log collector ships every line as its own record: ~10
+              # level-less records per error, shown as UNK in Grafana. The
+              # error line already names the component and the cause.
+              disable_stacktrace: true
       # A collector that cannot schedule is a blind spot, and these nodes run
       # hot. Same reasoning as #52 for Alloy.
       priorityClassName: system-node-critical
