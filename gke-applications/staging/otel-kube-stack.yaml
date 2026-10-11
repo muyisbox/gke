@@ -167,6 +167,10 @@ helm:
             # the collector had written them. Name them, and drop the identity
             # that belongs to the collector rather than the event.
             transform/events:
+              # A labelling step must never cost data: with the default
+              # (propagate), one statement erroring on an oddly-shaped event
+              # would drop the whole batch.
+              error_mode: ignore
               log_statements:
                 - context: log
                   conditions:
@@ -181,6 +185,13 @@ helm:
                     - delete_key(resource.attributes, "k8s.node.ip")
                     - delete_key(resource.attributes, "k8s.node.uid")
                     - delete_key(resource.attributes, "host.name")
+                    # The Event's type becomes the log level, so Warning events
+                    # filter and colour as warnings in Grafana instead of all
+                    # showing as "unknown".
+                    - set(severity_text, "WARN") where body["object"]["type"] == "Warning"
+                    - set(severity_number, SEVERITY_NUMBER_WARN) where body["object"]["type"] == "Warning"
+                    - set(severity_text, "INFO") where body["object"]["type"] == "Normal"
+                    - set(severity_number, SEVERITY_NUMBER_INFO) where body["object"]["type"] == "Normal"
             # Every Grafana dashboard and recording rule on the hub selects by
             # `cluster`. A datapoint attribute becomes a Prometheus label; the
             # k8s.cluster.name resource attribute would not.
