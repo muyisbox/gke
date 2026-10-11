@@ -51,7 +51,12 @@ helm:
         distributor:
           remote_timeout: null
         ingester:
-          push_grpc_method_enabled: null
+          # Must be an explicit true. The chart's base config sets this false for its
+          # Kafka-based write path, and the chart's own classic-mode example "unsets"
+          # it with null -- but null in Helm values means "delete this key", so the
+          # base false survived and every ingester refused to start: "cannot disable
+          # Push gRPC method in ingester, while ingest storage is not enabled".
+          push_grpc_method_enabled: true
           ring:
             # Every series on all three ingesters: one can restart or move
             # without a gap in recent data or a failed write.
