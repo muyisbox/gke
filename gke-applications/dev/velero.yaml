@@ -54,6 +54,14 @@ helm:
           storageLocation: default
           ttl: 720h
     deployNodeAgent: true
+    nodeAgent:
+      # Kept out of the mesh. It is a per-node agent that only talks to the
+      # API server and GCS, so a sidecar buys nothing -- and as a DaemonSet it
+      # must fit on every node: dev's e2-medium node has 8m of CPU left after
+      # GKE's own system pods, and the 20m sidecar request made the agent
+      # unschedulable there, leaving that node's volumes without backups.
+      podLabels:
+        sidecar.istio.io/inject: "false"
     resources:
       requests:
         cpu: 500m
