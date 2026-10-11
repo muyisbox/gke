@@ -239,6 +239,12 @@ helm:
     # KubeControllerManagerDown/KubeSchedulerDown-style alerts fire forever.
     kubeControllerManager:
       enabled: false
+    # GKE runs kube-dns, not CoreDNS: this monitor scraped :9153 on the
+    # kube-dns pods, where nothing listens -- 120 failed scrapes every 30
+    # minutes. kube-dns is scraped through the otel chart instead, as on
+    # the spokes.
+    coreDns:
+      enabled: false
     kubeEtcd:
       enabled: false
     kubeScheduler:
