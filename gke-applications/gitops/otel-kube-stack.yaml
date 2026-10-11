@@ -191,6 +191,38 @@ helm:
             # stamps the *collector's* own pod, node and host onto them, as if
             # the collector had written them. Name them, and drop the identity
             # that belongs to the collector rather than the event.
+            # Many formats carry no level Loki can read, so Grafana showed them
+            # as "unknown": klog (I/W/E/F prefix), and access logs, whose only
+            # signal is the HTTP status. Classified here, once, the same on
+            # every cluster. Tested against each format on the 0.159.0 image.
+            transform/severity:
+              error_mode: ignore
+              log_statements:
+                - context: log
+                  # Only records with no severity yet: events, and anything whose own
+                  # format already carried a level, keep theirs.
+                  conditions:
+                    - severity_number == SEVERITY_NUMBER_UNSPECIFIED
+                  statements:
+                    # klog (Kubernetes components, VPA, ...): "I1011 03:55:25.75 ..." --
+                    # the first letter is the level.
+                    - set(severity_text, "INFO") where IsMatch(body, "^I[0-9]{4} ")
+                    - set(severity_text, "WARN") where IsMatch(body, "^W[0-9]{4} ")
+                    - set(severity_text, "ERROR") where IsMatch(body, "^E[0-9]{4} ")
+                    - set(severity_text, "FATAL") where IsMatch(body, "^F[0-9]{4} ")
+                    # Access logs carry no level, only a status. Three shapes: Istio/Envoy
+                    # JSON ("response_code":503), standard nginx ("GET / HTTP/1.1" 503),
+                    # and Loki's gateway, which logs the status first ("...+0000]  503
+                    # "GET ..."). 5xx is an error, 4xx a warning, anything else info.
+                    # ([]] matches a literal "]" without an escape OTTL may not accept.)
+                    - set(severity_text, "ERROR") where IsMatch(body, "\"response_code\":5[0-9][0-9]") or IsMatch(body, "HTTP/[0-9.]+\" 5[0-9][0-9] ") or IsMatch(body, "[]] +5[0-9][0-9] \"")
+                    - set(severity_text, "WARN") where IsMatch(body, "\"response_code\":4[0-9][0-9]") or IsMatch(body, "HTTP/[0-9.]+\" 4[0-9][0-9] ") or IsMatch(body, "[]] +4[0-9][0-9] \"")
+                    - set(severity_text, "INFO") where severity_text == "" and (IsMatch(body, "\"response_code\":[0-9]") or IsMatch(body, "HTTP/[0-9.]+\" [0-9]{3} ") or IsMatch(body, "[]] +[0-9]{3} \""))
+                    # The number Loki and Grafana sort and filter on, from the text.
+                    - set(severity_number, SEVERITY_NUMBER_INFO) where severity_text == "INFO"
+                    - set(severity_number, SEVERITY_NUMBER_WARN) where severity_text == "WARN"
+                    - set(severity_number, SEVERITY_NUMBER_ERROR) where severity_text == "ERROR"
+                    - set(severity_number, SEVERITY_NUMBER_FATAL) where severity_text == "FATAL"
             transform/events:
               # A labelling step must never cost data: with the default
               # (propagate), one statement erroring on an oddly-shaped event
@@ -243,7 +275,7 @@ helm:
               # dropping resource_detection/env would strip k8s.cluster.name
               # from every log. transform/events must run after it.
               logs:
-                processors: [k8s_attributes, resource_detection/env, resource/hostname, transform/events, batch]
+                processors: [k8s_attributes, resource_detection/env, resource/hostname, transform/events, transform/severity, batch]
                 exporters: [otlphttp/loki]
 
       # Hub-only second collector. Spokes cannot reach Tempo or Loki directly,
