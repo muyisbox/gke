@@ -24,8 +24,14 @@ helm:
     login_token:
       signing_key: "CcRqw0m1NUxbrE6OtPjIEIKdcAiRAF1y"
     external_services:
+      # This cluster has no Prometheus; its metrics live on the hub,
+      # reachable on the VPC at the reserved internal LB address.
       prometheus:
-        url: http://prometheus-monitoring-kube-prometheus.monitoring:9090
+        url: http://10.30.127.201:9090
+        # Every cluster's series share that store; the scope keeps this
+        # Kiali to staging's own.
+        query_scope:
+          cluster: staging_cluster
       istio:
         config_map_name: istio
         istio_namespace: istio-system

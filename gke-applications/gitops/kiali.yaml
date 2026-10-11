@@ -26,6 +26,10 @@ helm:
     external_services:
       prometheus:
         url: http://prometheus-monitoring-kube-prometheus.monitoring:9090
+        # The hub Prometheus holds every cluster's metrics. Without a scope
+        # Kiali would draw dev and staging traffic into this mesh's graph.
+        query_scope:
+          cluster: gitops_cluster
       istio:
         config_map_name: istio
         istio_namespace: istio-system

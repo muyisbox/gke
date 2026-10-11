@@ -1,9 +1,7 @@
 name: otel-kube-stack
-# Replaces Alloy. One agent emitting logs, traces and Kubernetes events with a
-# single resource-attribute model, so a pod's logs and its traces are keyed
-# identically and can be correlated. Alloy could collect logs but gave no path
-# to traces without a second pipeline whose labels would have to be kept in
-# agreement by hand.
+# The only telemetry agent on this cluster. It collects logs, traces and
+# metrics alike and ships all three to the hub; nothing is stored here, so
+# nothing is lost when the cluster is destroyed overnight.
 chart: opentelemetry-kube-stack
 repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
 targetRevision: "0.24.3"
@@ -11,11 +9,9 @@ namespace: opentelemetry
 cluster_env: dev
 helm:
   values:
-    # kube-prometheus-stack owns the prometheus-operator CRDs. This chart
-    # bundles its own older copy (0.92.0 against 0.94.0), so the two apps
-    # overwrote each other on every sync and left dev and staging running
-    # the 0.94 operator against downgraded 0.92 CRDs. Only the OTel CRDs
-    # come from here.
+    # The prometheus-operator CRDs come from the prometheus-operator-crds app.
+    # This chart bundles an older copy (0.92.0 against 0.94.0) that fought
+    # over the same objects. Only the OTel CRDs come from here.
     crds:
       installPrometheus: false
     # Becomes k8s.cluster.name on every signal. The chart defaults this to
@@ -24,7 +20,14 @@ helm:
     clusterName: dev
 
     collectors:
+      # One per node: logs, traces, Kubernetes events, and the kubelet --
+      # which can only be scraped per node.
       daemon:
+        # The chart's default scrape file also scrapes node-exporter and
+        # annotated pods, which the cluster collector below already covers
+        # through their ServiceMonitors. One path per target, or every series
+        # arrives twice.
+        scrape_configs_file: ""
         presets:
           logsCollection:
             enabled: true
@@ -37,9 +40,10 @@ helm:
               enabled: true
             k8s_api:
               enabled: true
-          # kube-prometheus-stack already scrapes all of these. Leaving them on
-          # would double-collect every node and cluster metric and double the
-          # Prometheus bill for nothing.
+          # OTel-native host and kubelet metrics use semantic-convention names
+          # (k8s.pod.cpu.usage, ...) that none of the hub's kube-prometheus
+          # dashboards or rules understand. The Prometheus-format scrapes
+          # below produce the names they expect.
           hostMetrics:
             enabled: false
           kubeletMetrics:
@@ -48,11 +52,112 @@ helm:
             enabled: false
 
         config:
+          receivers:
+            prometheus/kubelet:
+              config:
+                scrape_configs:
+                  - job_name: kubelet
+                    metrics_path: /metrics
+                    scheme: https
+                    scrape_interval: 30s
+                    honor_labels: true
+                    authorization:
+                      type: Bearer
+                      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                    tls_config:
+                      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                      insecure_skip_verify: true
+                    kubernetes_sd_configs:
+                    - role: node
+                      selectors:
+                      - role: node
+                        field: metadata.name=${env:OTEL_K8S_NODE_NAME}
+                    relabel_configs:
+                    - action: replace
+                      target_label: job
+                      replacement: kubelet
+                    - action: replace
+                      source_labels:
+                      - __meta_kubernetes_node_name
+                      target_label: node
+                    - action: replace
+                      target_label: endpoint
+                      replacement: https-metrics
+                    - action: replace
+                      source_labels:
+                      - __metrics_path__
+                      target_label: metrics_path
+                  - job_name: kubelet-cadvisor
+                    metrics_path: /metrics/cadvisor
+                    scheme: https
+                    scrape_interval: 30s
+                    honor_labels: true
+                    honor_timestamps: true
+                    authorization:
+                      type: Bearer
+                      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                    tls_config:
+                      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                      insecure_skip_verify: true
+                    kubernetes_sd_configs:
+                    - role: node
+                      selectors:
+                      - role: node
+                        field: metadata.name=${env:OTEL_K8S_NODE_NAME}
+                    relabel_configs:
+                    - action: replace
+                      target_label: job
+                      replacement: kubelet
+                    - action: replace
+                      source_labels:
+                      - __meta_kubernetes_node_name
+                      target_label: node
+                    - action: replace
+                      target_label: endpoint
+                      replacement: https-metrics
+                    - action: replace
+                      source_labels:
+                      - __metrics_path__
+                      target_label: metrics_path
+                    metric_relabel_configs:
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_cpu_(load_average_10s|system_seconds_total|user_seconds_total)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_fs_(io_current|reads_merged_total|sector_reads_total|sector_writes_total|writes_merged_total)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_memory_(mapped_file|swap)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_(file_descriptors|tasks_state|threads_max)
+                    - action: drop
+                      source_labels:
+                      - __name__
+                      regex: container_spec.*
+                    - action: drop
+                      source_labels:
+                      - id
+                      - pod
+                      regex: .+;
+          processors:
+            # Every Grafana dashboard and recording rule on the hub selects by
+            # `cluster`. A datapoint attribute becomes a Prometheus label; the
+            # k8s.cluster.name resource attribute would not.
+            transform/cluster:
+              metric_statements:
+                - context: datapoint
+                  statements:
+                    - set(attributes["cluster"], "dev_cluster")
+            batch: {}
           exporters:
-            # Everything leaves the cluster. The hub's gateway is the only
-            # telemetry endpoint a spoke knows; it fans out to Tempo and Loki
-            # on the far side. Spokes keep no backend of their own, so nothing
-            # is lost when the cluster is destroyed overnight.
+            # The hub's gateway is the only telemetry endpoint a spoke knows;
+            # it fans out to Prometheus, Loki and Tempo on the far side.
             otlp/hub:
               endpoint: 10.30.127.200:4317
               tls:
@@ -64,19 +169,86 @@ helm:
               sending_queue:
                 enabled: true
                 queue_size: 5000
-          # Only exporters are set. The chart builds receivers and processors
-          # from the presets above and overrides anything named here, so
-          # listing them would imply a control that does not exist.
           service:
             pipelines:
-              # Dropped entirely. kube-prometheus-stack owns metrics, and the
-              # chart's default metrics pipeline exports to the debug exporter,
-              # which logs every datapoint -- which file_log then collects and
-              # ships to Loki. A feedback loop of its own noise.
-              metrics: null
+              # otlp too: an app pushing metrics to its node's collector
+              # reaches the hub the same way the scraped ones do.
+              metrics:
+                receivers: [prometheus/kubelet, otlp]
+                processors: [transform/cluster, batch]
+                exporters: [otlp/hub]
               traces:
                 exporters: [otlp/hub]
               logs:
+                exporters: [otlp/hub]
+
+      # One per cluster: everything that has a ServiceMonitor or PodMonitor.
+      # The target allocator reads those CRs the way a Prometheus server
+      # would, so every app's existing ServiceMonitor keeps working with no
+      # Prometheus here to read it.
+      cluster:
+        enabled: true
+        suffix: cluster
+        mode: statefulset
+        replicas: 1
+        targetAllocator:
+          enabled: true
+          allocationStrategy: consistent-hashing
+          prometheusCR:
+            enabled: true
+            scrapeInterval: 30s
+            # Empty selectors select everything, in every namespace. Apps
+            # label their ServiceMonitors for kube-prometheus-stack's
+            # release selector, which no longer means anything here.
+            serviceMonitorSelector: {}
+            podMonitorSelector: {}
+        presets:
+          logsCollection:
+            enabled: false
+          kubernetesAttributes:
+            enabled: false
+          kubernetesEvents:
+            enabled: false
+          hostMetrics:
+            enabled: false
+          kubeletMetrics:
+            enabled: false
+          clusterMetrics:
+            enabled: false
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+        config:
+          receivers:
+            # The operator fills in the target allocator endpoint.
+            prometheus:
+              config:
+                scrape_configs: []
+          processors:
+            transform/cluster:
+              metric_statements:
+                - context: datapoint
+                  statements:
+                    - set(attributes["cluster"], "dev_cluster")
+            batch: {}
+          exporters:
+            otlp/hub:
+              endpoint: 10.30.127.200:4317
+              tls:
+                insecure: true
+              retry_on_failure:
+                enabled: true
+              sending_queue:
+                enabled: true
+                queue_size: 5000
+          service:
+            pipelines:
+              metrics:
+                receivers: [prometheus]
+                processors: [transform/cluster, batch]
                 exporters: [otlp/hub]
 
     # Applied to the collector CRs the chart generates.
@@ -125,9 +297,20 @@ helm:
                   - system-node-critical
                   - system-cluster-critical
 
-    # kube-prometheus-stack owns both already; a second copy of node-exporter
-    # would collide on its hostPort.
+    # What kube-prometheus-stack used to provide on this cluster. Each ships
+    # a ServiceMonitor that the cluster collector picks up, under the same
+    # job names (kube-state-metrics, node-exporter, apiserver, kube-dns) the
+    # hub's rules and dashboards select on.
     kubeStateMetrics:
-      enabled: false
+      enabled: true
     nodeExporter:
-      enabled: false
+      enabled: true
+    kubernetesServiceMonitors:
+      enabled: true
+    kubeApiServer:
+      enabled: true
+    # GKE runs kube-dns, not CoreDNS. The control-plane components
+    # (controller-manager, scheduler, etcd) are Google-managed and not
+    # scrapeable, so they stay off.
+    kubeDns:
+      enabled: true
