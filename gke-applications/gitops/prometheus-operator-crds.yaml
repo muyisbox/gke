@@ -1,0 +1,23 @@
+name: prometheus-operator-crds
+# The ServiceMonitor, PodMonitor and PrometheusRule CRDs, without a
+# Prometheus. On the hub these came from kube-prometheus-stack, which is being
+# retired; this app takes them over first so that removal cannot take them
+# (and every app's ServiceMonitors and PrometheusRules) with it. Several apps here ship ServiceMonitors (cert-manager,
+# external-secrets, the OTel operator, ...) and fail to sync if the kinds do
+# not exist; the OTel target allocator reads those same objects to decide
+# what to scrape. 32.0.0 is operator v0.94.0, matching the hub.
+chart: prometheus-operator-crds
+repoURL: https://prometheus-community.github.io/helm-charts
+targetRevision: "32.0.0"
+namespace: monitoring
+cluster_env: gitops
+# Telemetry pipeline: kept out of the mesh (see the ApplicationSet template).
+istioInjection: disabled
+helm:
+  values:
+    crds:
+      # Removing a CRD deletes every object of that kind cluster-wide, every
+      # app's ServiceMonitors with it. Neither a prune nor deleting this
+      # Application should ever be able to do that.
+      annotations:
+        argocd.argoproj.io/sync-options: Prune=false,Delete=false
