@@ -189,6 +189,11 @@ helm:
         # label is set there, on every series, so no externalLabels are
         # needed to tell clusters apart.
         enableOTLPReceiver: true
+        # The disk is 10Gi and three clusters write ~2GB a day; with only a
+        # 10d time limit it would have filled in about 5 days, and Prometheus
+        # fails outright on a full disk. Past this size the oldest blocks go
+        # first. A stopgap until Mimir on GCS takes over long-term storage.
+        retentionSize: 8GB
         # Tempo's metrics generator writes its span metrics and service graph
         # here by remote-write (it has no OTLP output). It sends to each
         # replica's pod address, inside the cluster.
