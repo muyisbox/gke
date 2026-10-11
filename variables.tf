@@ -325,6 +325,21 @@ variable "velero" {
   default = {}
 }
 
+variable "observability_storage" {
+  description = "GCS buckets for the hub's telemetry backends, keyed by backend. Each key becomes bucket <project_id>-<key> and service account <key>-storage, bound by Workload Identity to <namespace>/<service_account>."
+  type = object({
+    backends = optional(map(object({
+      namespace       = string
+      service_account = string
+      })), {
+      loki  = { namespace = "logging", service_account = "loki" }
+      tempo = { namespace = "tracing", service_account = "tempo" }
+      mimir = { namespace = "mimir", service_account = "mimir" }
+    })
+  })
+  default = {}
+}
+
 # Shape shared by both ArgoCD charts. Everything not listed here falls back to
 # the modules/helm defaults.
 variable "argocd" {
