@@ -29,6 +29,13 @@ helm:
                 requests:
                   storage: 5Gi
     grafana:
+      # The bundled dashboards gain a `cluster` selector. Without it every
+      # panel silently sums dev, staging and the hub together.
+      sidecar:
+        dashboards:
+          multicluster:
+            global:
+              enabled: true
       additionalDataSources:
         - name: Tempo
           access: proxy
@@ -45,22 +52,42 @@ helm:
           url: http://loki.logging.svc.cluster.local:3100
           version: 1
     prometheus:
-      # Reserved in shared-network.tf. Spoke Prometheus instances write here,
-      # so the address has to outlive a hub rebuild.
+      # Reserved in shared-network.tf. Nothing writes here any more -- metrics
+      # arrive over OTLP through the gateway -- but each spoke's Kiali queries
+      # its own cluster's Istio metrics from this store, so it stays reachable
+      # on the VPC at an address that outlives a hub rebuild.
       service:
         type: LoadBalancer
         loadBalancerIP: "10.30.127.201"
         annotations:
           networking.gke.io/load-balancer-type: "Internal"
       prometheusSpec:
-        # Was set at the top level of values, which kube-prometheus-stack does
-        # not read, so it never reached the Prometheus spec. It matters now:
-        # once three clusters remote-write into one store, this label is the
-        # only thing keeping their series apart.
-        externalLabels:
-          cluster: gitops_cluster
-        # Off by default. Without it the spokes' remote_write is refused.
-        enableRemoteWriteReceiver: true
+        # Storage and rule evaluation only. Every cluster's collector,
+        # this one's included, scrapes and pushes over OTLP; the `cluster`
+        # label is set there, on every series, so no externalLabels are
+        # needed to tell clusters apart.
+        enableOTLPReceiver: true
+        # Pushed data can land late: collector retries after a hub restart,
+        # two gateway replicas interleaving. Without a window those samples
+        # are refused as out of order and simply lost.
+        tsdb:
+          outOfOrderTimeWindow: 30m
+        # Scrape nothing directly. The collectors already scrape every
+        # ServiceMonitor through the target allocator; if Prometheus also
+        # did, the hub's series would exist twice -- once with `cluster`,
+        # once without. No ServiceMonitor carries this label.
+        serviceMonitorSelector:
+          matchLabels:
+            scraped-by: prometheus-server
+        podMonitorSelector:
+          matchLabels:
+            scraped-by: prometheus-server
+        probeSelector:
+          matchLabels:
+            scraped-by: prometheus-server
+        scrapeConfigSelector:
+          matchLabels:
+            scraped-by: prometheus-server
         replicas: 2
         storageSpec:
           volumeClaimTemplate:
