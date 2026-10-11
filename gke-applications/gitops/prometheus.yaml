@@ -96,6 +96,17 @@ helm:
               resources:
                 requests:
                   storage: 10Gi
+    # Google manages these on GKE and exposes none of them. Their monitors
+    # could only ever report down -- and with them on, the bundled
+    # KubeControllerManagerDown/KubeSchedulerDown-style alerts fire forever.
+    kubeControllerManager:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
     # Both of these ran as BestEffort (no requests at all), were packed onto the
     # smallest node in the cluster, and exited 2 in a crash loop.
     kube-state-metrics:
