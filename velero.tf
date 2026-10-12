@@ -20,9 +20,10 @@ locals {
 resource "google_storage_bucket" "velero" {
   count = local.velero_enabled ? 1 : 0
 
-  name     = local.velero_bucket
-  project  = var.project_id
-  location = local.velero_location
+  name          = local.velero_bucket
+  project       = var.project_id
+  location      = local.velero_location
+  force_destroy = true
 
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"

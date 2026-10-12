@@ -28,6 +28,9 @@ resource "google_storage_bucket" "observability" {
   project  = var.project_id
   location = upper(var.region)
 
+  # Without this, destroying the gitops workspace fails on any non-empty bucket.
+  force_destroy = true
+
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
