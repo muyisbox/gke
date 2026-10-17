@@ -28,7 +28,11 @@ helm:
       # reachable on the VPC at the reserved internal LB address
       # (mimir-query-ilb), under Mimir's Prometheus API prefix.
       prometheus:
+        enabled: true
         url: http://10.30.127.201/prometheus
+        # Kiali 2.32 probes <url>/-/healthy before enabling metrics.
+        # Mimir has no such route; its gateway serves /ready instead.
+        health_check_url: http://10.30.127.201/ready
         # Every cluster's series share that store; the scope keeps this
         # Kiali to dev's own.
         query_scope:
