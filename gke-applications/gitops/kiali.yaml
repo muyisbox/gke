@@ -27,7 +27,11 @@ helm:
       # Mimir's Prometheus API, through its gateway. Still called
       # "prometheus": Kiali speaks the Prometheus query API to either.
       prometheus:
+        enabled: true
         url: http://mimir-gateway.mimir.svc.cluster.local/prometheus
+        # Kiali 2.32 probes <url>/-/healthy before enabling metrics.
+        # Mimir has no such route; its gateway serves /ready instead.
+        health_check_url: http://mimir-gateway.mimir.svc.cluster.local/ready
         # Mimir holds every cluster's metrics. Without a scope Kiali would
         # draw dev and staging traffic into this mesh's graph.
         query_scope:
